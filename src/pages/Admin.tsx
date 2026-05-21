@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import React, { useState, useEffect } from 'react';
+import { db, handleFirestoreError, OperationType, auth, updatePassword } from '../firebase';
 import { collection, getDocs, deleteDoc, doc, updateDoc, query, limit } from 'firebase/firestore';
 import { UserProfile, ProviderProfile, Booking } from '../types';
-import { Users, Briefcase, Calendar, Trash2, CheckCircle, ShieldAlert, Star, Search } from 'lucide-react';
-import { motion } from 'motion/react';
+import { Users, Briefcase, Calendar, Trash2, CheckCircle, ShieldAlert, Star, Search, Lock, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 export default function AdminPanel() {
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -12,6 +12,50 @@ export default function AdminPanel() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'users' | 'providers' | 'bookings' | 'verifications' | 'finances'>('users');
   const [search, setSearch] = useState('');
+
+  // Password reset/management state
+  const [showPwdModal, setShowPwdModal] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [pwdLoading, setPwdLoading] = useState(false);
+  const [pwdError, setPwdError] = useState<string | null>(null);
+  const [pwdSuccess, setPwdSuccess] = useState<string | null>(null);
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPwdError(null);
+    setPwdSuccess(null);
+
+    if (newPassword !== confirmPassword) {
+      setPwdError('Passwords do not match');
+      return;
+    }
+    if (newPassword.length < 6) {
+      setPwdError('Password must be at least 6 characters long');
+      return;
+    }
+
+    setPwdLoading(true);
+    try {
+      if (auth.currentUser) {
+        await updatePassword(auth.currentUser, newPassword);
+        setPwdSuccess('Your password has been changed successfully!');
+        setNewPassword('');
+        setConfirmPassword('');
+        setTimeout(() => {
+          setShowPwdModal(false);
+          setPwdSuccess(null);
+        }, 2000);
+      } else {
+        setPwdError('No authenticated session found.');
+      }
+    } catch (error: any) {
+      console.error(error);
+      setPwdError(error.message || 'Failed to update password. You may need to sign out and log back in.');
+    } finally {
+      setPwdLoading(false);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -69,7 +113,19 @@ export default function AdminPanel() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-12">
         <div>
           <h1 className="text-4xl font-black text-gray-900 mb-2">Admin Control</h1>
-          <p className="text-gray-500">Monitor and moderate PinYourPro users and services.</p>
+          <p className="text-gray-500 text-sm mb-4">Monitor and moderate PinYourPro users and services.</p>
+          <button
+            onClick={() => {
+              setPwdError(null);
+              setPwdSuccess(null);
+              setNewPassword('');
+              setConfirmPassword('');
+              setShowPwdModal(true);
+            }}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all"
+          >
+            <Lock size={12} /> Change Admin Password
+          </button>
         </div>
 
         <div className="flex bg-gray-100 p-1.5 rounded-2xl">
@@ -326,6 +382,88 @@ export default function AdminPanel() {
           </div>
         )}
       </div>
+
+      {/* Change Password Modal */}
+      <AnimatePresence>
+        {showPwdModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-md bg-slate-900/60 font-sans">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white p-8 rounded-[2.5rem] w-full max-w-md shadow-2xl relative border border-slate-100"
+            >
+              <button 
+                onClick={() => setShowPwdModal(false)}
+                className="absolute right-6 top-6 p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 opacity-100 rounded-xl transition-all"
+              >
+                <X size={20} />
+              </button>
+
+              <div className="text-center mb-6">
+                <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <Lock size={28} />
+                </div>
+                <h2 className="text-2xl font-black text-slate-900 mb-1">Update Password</h2>
+                <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">Superuser Security Control</p>
+              </div>
+
+              {pwdError && (
+                <div className="mb-4 p-3 bg-red-50 text-red-700 text-xs font-bold rounded-xl border border-red-100 flex items-center gap-2">
+                  <span>⚠️</span>
+                  <p>{pwdError}</p>
+                </div>
+              )}
+
+              {pwdSuccess && (
+                <div className="mb-4 p-3 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-xl border border-emerald-100 flex items-center gap-2">
+                  <span>✅</span>
+                  <p>{pwdSuccess}</p>
+                </div>
+              )}
+
+              <form onSubmit={handlePasswordChange} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">New Password</label>
+                  <input 
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    required
+                    minLength={6}
+                    className="w-full px-5 py-3.5 bg-slate-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl outline-none transition-all font-medium text-sm"
+                    placeholder="Min 6 characters"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Confirm Password</label>
+                  <input 
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    className="w-full px-5 py-3.5 bg-slate-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl outline-none transition-all font-medium text-sm"
+                    placeholder="Type again to confirm"
+                  />
+                </div>
+
+                <button 
+                  type="submit"
+                  disabled={pwdLoading}
+                  className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 hover:bg-slate-800 transition-all shadow-xl shadow-slate-100 disabled:opacity-50 mt-2"
+                >
+                  {pwdLoading ? (
+                    <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                  ) : (
+                    'Save Permanent Password'
+                  )}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

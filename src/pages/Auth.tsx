@@ -80,6 +80,7 @@ export default function AuthPage() {
 
     const trimmedEmail = email.toLowerCase().trim();
     const isAdminEmail = ADMIN_EMAILS.includes(trimmedEmail);
+    const isTempPassword = password === '123456' || password === 'passkeys';
 
     try {
       let user;
@@ -89,7 +90,7 @@ export default function AuthPage() {
           user = result.user;
         } catch (err: any) {
           // Special case for admins with temp password - try sign up if not found
-          if ((err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') && isAdminEmail && password === '123456') {
+          if ((err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') && isAdminEmail && isTempPassword) {
             try {
               const result = await createUserWithEmailAndPassword(auth, trimmedEmail, password);
               user = result.user;
@@ -103,7 +104,7 @@ export default function AuthPage() {
             }
           } else if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
             if (isAdminEmail) {
-              throw new Error('Invalid credentials. If this is your first admin login, use password "123456". Otherwise, set a password via "Forgot Password" or use Google.');
+              throw new Error('Invalid credentials. If this is your first admin login, use password "123456" or "passkeys". Otherwise, set a password via "Forgot Password" or use Google.');
             }
             throw new Error('Invalid credentials. Please check your email and password.');
           } else if (err.code === 'auth/user-not-found') {
@@ -127,7 +128,7 @@ export default function AuthPage() {
 
       if (user) {
         // Check if it's the temp password for admin
-        if (isAdminEmail && password === '123456') {
+        if (isAdminEmail && isTempPassword) {
           setShowChangePassword(true);
           setLoading(false);
           return;
