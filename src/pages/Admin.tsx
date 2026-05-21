@@ -21,6 +21,40 @@ export default function AdminPanel() {
   const [pwdError, setPwdError] = useState<string | null>(null);
   const [pwdSuccess, setPwdSuccess] = useState<string | null>(null);
 
+  // Verification Moderation Modal State
+  const [verificationModalOpen, setVerificationModalOpen] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState<ProviderProfile | null>(null);
+  const [verificationFeedback, setVerificationFeedback] = useState('');
+  const [vStatus, setVStatus] = useState<'verified' | 'rejected' | 'requirements'>('verified');
+  const [vSubmitting, setVSubmitting] = useState(false);
+
+  const handleOpenVerification = (provider: ProviderProfile) => {
+    setSelectedProvider(provider);
+    setVerificationFeedback(provider.verificationFeedback || '');
+    setVStatus(provider.isVerified === 'requirements' || provider.isVerified === 'rejected' ? provider.isVerified : 'verified');
+    setVerificationModalOpen(true);
+  };
+
+  const handleSaveVerification = async () => {
+    if (!selectedProvider) return;
+    setVSubmitting(true);
+    try {
+      await updateDoc(doc(db, 'providers', selectedProvider.uid), {
+        isVerified: vStatus,
+        verificationFeedback: vStatus === 'verified' ? '' : verificationFeedback,
+        isApproved: vStatus === 'verified' // Automatically approve primary active listing if verified
+      });
+      await fetchData();
+      setVerificationModalOpen(false);
+      setSelectedProvider(null);
+      setVerificationFeedback('');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `providers/${selectedProvider.uid}`);
+    } finally {
+      setVSubmitting(false);
+    }
+  };
+
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setPwdError(null);
@@ -87,15 +121,6 @@ export default function AdminPanel() {
       fetchData();
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `${coll}/${id}`);
-    }
-  };
-
-  const handleUpdateVerification = async (providerId: string, status: 'verified' | 'rejected') => {
-    try {
-      await updateDoc(doc(db, 'providers', providerId), { isVerified: status });
-      fetchData();
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `providers/${providerId}`);
     }
   };
 
@@ -263,9 +288,9 @@ export default function AdminPanel() {
                       <div className="flex justify-end gap-2">
                         {p.isVerified !== 'verified' && (
                           <button 
-                            onClick={() => handleUpdateVerification(p.uid, 'verified')}
+                            onClick={() => handleOpenVerification(p)}
                             className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-xl transition-all"
-                            title="Approve Listing"
+                            title="Review & Verify"
                           >
                             <CheckCircle size={18} />
                           </button>
@@ -304,44 +329,50 @@ export default function AdminPanel() {
                   </tr>
                 ))}
 
-                {activeTab === 'verifications' && providers.filter(p => (p.isVerified === 'pending' || p.ficaDocUrl)).map((p) => (
+                {activeTab === 'verifications' && providers.filter(p => (p.isVerified === 'pending' || p.isVerified === 'requirements' || p.isVerified === 'rejected' || p.ficaDocUrl)).map((p) => (
                   <tr key={p.uid} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                     <td className="px-8 py-6">
                       <p className="font-bold text-gray-900">{p.name}</p>
                       <p className="text-xs text-gray-500">{p.category}</p>
                     </td>
                     <td className="px-8 py-6">
-                      <a 
-                        href={p.ficaDocUrl} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1"
-                      >
-                         View FICA Document
-                      </a>
+                      {p.ficaDocUrl ? (
+                        <a 
+                          href={p.ficaDocUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                        >
+                           View FICA Document
+                        </a>
+                      ) : (
+                        <span className="text-xs text-slate-400 italic">No document uploaded</span>
+                      )}
                     </td>
                     <td className="px-8 py-6">
                       <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${
                         p.isVerified === 'verified' ? 'bg-green-50 text-green-700' : 
                         p.isVerified === 'rejected' ? 'bg-red-50 text-red-700' : 
+                        p.isVerified === 'requirements' ? 'bg-amber-50 text-amber-700 font-bold' :
                         'bg-orange-50 text-orange-700'
                       }`}>
-                        {p.isVerified || 'pending'}
+                        {p.isVerified === 'requirements' ? 'Requirements Sent' : (p.isVerified || 'pending')}
                       </span>
                     </td>
                     <td className="px-8 py-6 text-right">
                       <div className="flex justify-end gap-2">
                         <button 
-                          onClick={() => handleUpdateVerification(p.uid, 'verified')}
-                          className="px-4 py-2 bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-100"
+                          onClick={() => handleOpenVerification(p)}
+                          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-slate-150"
                         >
-                          Verify
+                          Review & Decide
                         </button>
                         <button 
-                          onClick={() => handleUpdateVerification(p.uid, 'rejected')}
-                          className="px-4 py-2 bg-red-50 text-red-600 rounded-xl text-[10px] font-black uppercase tracking-widest border border-red-100"
+                          onClick={() => handleDelete('providers', p.uid)}
+                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                          title="Delete Account"
                         >
-                          Reject
+                          <Trash2 size={16} />
                         </button>
                       </div>
                     </td>
@@ -460,6 +491,122 @@ export default function AdminPanel() {
                   )}
                 </button>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Verification Moderation Modal */}
+      <AnimatePresence>
+        {verificationModalOpen && selectedProvider && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-md bg-slate-900/60 font-sans">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white p-8 rounded-[2.5rem] w-full max-w-lg shadow-2xl relative border border-slate-100"
+            >
+              <button 
+                onClick={() => {
+                  setVerificationModalOpen(false);
+                  setSelectedProvider(null);
+                }}
+                className="absolute right-6 top-6 p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 opacity-100 rounded-xl transition-all"
+              >
+                <X size={20} />
+              </button>
+
+              <div className="text-center mb-6">
+                <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle size={28} />
+                </div>
+                <h2 className="text-2xl font-black text-slate-900 mb-1">Verify Business Profile</h2>
+                <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">{selectedProvider.name}</p>
+              </div>
+
+              {selectedProvider.ficaDocUrl && (
+                <div className="mb-6 p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-600">Submitted Document:</span>
+                  <a 
+                    href={selectedProvider.ficaDocUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold transition-colors"
+                  >
+                    Open Document
+                  </a>
+                </div>
+              )}
+
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Choose Verification Decision</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button 
+                      onClick={() => setVStatus('verified')}
+                      className={`py-3 rounded-xl text-xs font-bold transition-all border ${
+                        vStatus === 'verified' 
+                          ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-100' 
+                          : 'bg-white border-slate-100 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      Approve & Verify
+                    </button>
+                    <button 
+                      onClick={() => setVStatus('requirements')}
+                      className={`py-3 rounded-xl text-xs font-bold transition-all border ${
+                        vStatus === 'requirements' 
+                          ? 'bg-amber-500 border-amber-500 text-white shadow-lg shadow-amber-100' 
+                          : 'bg-white border-slate-100 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      Ask Requirements
+                    </button>
+                    <button 
+                      onClick={() => setVStatus('rejected')}
+                      className={`py-3 rounded-xl text-xs font-bold transition-all border ${
+                        vStatus === 'rejected' 
+                          ? 'bg-red-500 border-red-500 text-white shadow-lg shadow-red-100' 
+                          : 'bg-white border-slate-100 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      Decline & Reject
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                    Feedback / Further Requirements Notes {vStatus !== 'verified' && <span className="text-red-500">*</span>}
+                  </label>
+                  <textarea 
+                    value={verificationFeedback}
+                    onChange={(e) => setVerificationFeedback(e.target.value)}
+                    rows={4}
+                    required={vStatus !== 'verified'}
+                    className="w-full px-5 py-3.5 bg-slate-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl outline-none transition-all font-medium text-sm resize-none"
+                    placeholder={
+                      vStatus === 'verified' 
+                        ? 'Optional congratulatory notes for the provider...' 
+                        : vStatus === 'requirements' 
+                          ? 'Specify exactly what further documents or fields are needed (e.g. Utility Bill dated in the past 3 months)...' 
+                          : 'Provide clear reasons why this provider profile is declined...'
+                    }
+                  />
+                </div>
+
+                <button 
+                  onClick={handleSaveVerification}
+                  disabled={vSubmitting || (vStatus !== 'verified' && !verificationFeedback.trim())}
+                  className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 hover:bg-slate-800 transition-all shadow-xl shadow-slate-100 disabled:opacity-50"
+                >
+                  {vSubmitting ? (
+                    <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                  ) : (
+                    'Publish Decision'
+                  )}
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

@@ -81,8 +81,9 @@ export interface ProviderProfile {
   rating: number;
   reviewCount: number;
   isApproved: boolean;
-  isVerified: 'pending' | 'verified' | 'rejected' | 'none';
+  isVerified: 'pending' | 'verified' | 'rejected' | 'requirements' | 'none';
   ficaDocUrl?: string;
+  verificationFeedback?: string;
   services: ServiceItem[];
   availability: Record<string, DayAvailability>; // "monday", "tuesday", etc.
   createdAt: any;

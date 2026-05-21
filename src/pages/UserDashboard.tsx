@@ -47,6 +47,14 @@ export default function UserDashboard() {
   const [providerProfile, setProviderProfile] = useState<ProviderProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast(prev => prev?.message === message ? null : prev);
+    }, 4500);
+  };
 
   // Review State
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
@@ -130,9 +138,10 @@ export default function UserDashboard() {
     try {
       await updateDoc(doc(db, 'users', user.uid), { displayName });
       await refreshProfile();
-      alert('Profile updated!');
+      showToast('Profile updated successfully!');
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+      showToast('Failed to update profile.', 'error');
     } finally {
       setUpdating(false);
     }
@@ -152,9 +161,10 @@ export default function UserDashboard() {
         photoURL: profile?.photoURL || '',
         updatedAt: serverTimestamp(),
       }, { merge: true });
-      alert('Provider profile updated!');
+      showToast('Provider profile updated successfully!');
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `providers/${user.uid}`);
+      showToast('Failed to update provider settings.', 'error');
     } finally {
       setUpdating(false);
     }
@@ -180,12 +190,13 @@ export default function UserDashboard() {
       });
 
       setBookings(prev => prev.map(b => b.id === selectedBookingForReview.id ? { ...b, isReviewed: true } : b));
-      alert('Review submitted successfully!');
+      showToast('Review submitted successfully!');
       setReviewModalOpen(false);
       setComment('');
       setRating(5);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'reviews');
+      showToast('Failed to submit review.', 'error');
     } finally {
       setSubmittingReview(false);
     }
@@ -196,7 +207,28 @@ export default function UserDashboard() {
   }, 0);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-12">
+    <div className="max-w-7xl mx-auto px-4 py-12 relative">
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -50, scale: 0.9 }}
+            className={`fixed top-8 left-1/2 -translate-x-1/2 z-[999] px-6 py-4 rounded-2xl shadow-xl flex items-center gap-3 border text-sm font-bold ${
+              toast.type === 'success' 
+                ? 'bg-emerald-50 border-emerald-100 text-emerald-800 shadow-emerald-100/50' 
+                : 'bg-rose-50 border-rose-100 text-rose-800 shadow-rose-100/50'
+            }`}
+          >
+            {toast.type === 'success' ? <CheckCircle2 className="text-emerald-600" size={18} /> : <AlertCircle className="text-rose-500 animate-pulse" size={18} />}
+            <span>{toast.message}</span>
+            <button onClick={() => setToast(null)} className="ml-2 hover:opacity-75 text-slate-400">
+              <X size={16} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="flex flex-col lg:flex-row gap-12">
         {/* Sidebar */}
         <div className="lg:w-64 flex flex-col gap-2">
@@ -482,9 +514,10 @@ export default function UserDashboard() {
                         await updateDoc(doc(db, 'providers', user!.uid), {
                           services: providerProfile.services
                         });
-                        alert('Services updated successfully!');
+                        showToast('Selected services have been saved successfully!');
                       } catch (e) {
                         handleFirestoreError(e, OperationType.UPDATE, 'providers');
+                        showToast('Failed to save selected services.', 'error');
                       } finally {
                         setUpdating(false);
                       }
@@ -631,9 +664,10 @@ export default function UserDashboard() {
                         await updateDoc(doc(db, 'providers', user!.uid), {
                           availability: providerProfile.availability
                         });
-                        alert('Availability updated successfully!');
+                        showToast('Availability schedule saved successfully!');
                       } catch (e) {
                         handleFirestoreError(e, OperationType.UPDATE, 'providers');
+                        showToast('Failed to save schedule.', 'error');
                       } finally {
                         setUpdating(false);
                       }
@@ -662,19 +696,31 @@ export default function UserDashboard() {
                   <div className={`flex items-center gap-8 p-8 rounded-[2rem] ${
                     providerProfile.isVerified === 'verified' ? 'bg-emerald-50 text-emerald-700' :
                     providerProfile.isVerified === 'pending' ? 'bg-orange-50 text-orange-700' :
-                    providerProfile.isVerified === 'rejected' ? 'bg-red-50 text-red-700' :
+                    providerProfile.isVerified === 'rejected' ? 'bg-rose-50 text-rose-700' :
+                    providerProfile.isVerified === 'requirements' ? 'bg-amber-50 text-amber-700' :
                     'bg-gray-50 text-gray-500'
                   }`}>
                     <ShieldCheck size={48} className="shrink-0" />
                     <div>
-                      <h3 className="text-2xl font-black capitalize">{providerProfile.isVerified || 'Not Verified'}</h3>
+                      <h3 className="text-2xl font-black capitalize">
+                        {providerProfile.isVerified === 'requirements' ? 'Further Requirements' : (providerProfile.isVerified || 'Not Verified')}
+                      </h3>
                       <p className="text-sm font-medium opacity-80">
                         {providerProfile.isVerified === 'verified' ? 'Your business is fully verified and trusted.' : 
                          providerProfile.isVerified === 'pending' ? 'Our admins are currently reviewing your documents.' :
+                         providerProfile.isVerified === 'rejected' ? 'Verification was declined.' :
+                         providerProfile.isVerified === 'requirements' ? 'Further documents/information are requested to process verification.' :
                          'Please upload clear copies of your ID and proof of residence.'}
                       </p>
                     </div>
                   </div>
+
+                  {providerProfile.verificationFeedback && (
+                    <div className="p-6 bg-amber-50/60 border border-amber-100 rounded-2xl text-amber-900 space-y-1">
+                      <p className="text-[10px] uppercase tracking-widest font-black text-amber-600">Admin Notes / Feedback:</p>
+                      <p className="text-sm font-medium leading-relaxed">{providerProfile.verificationFeedback}</p>
+                    </div>
+                  )}
 
                   <div className="space-y-4">
                     <label className="text-xs font-bold text-gray-400 uppercase tracking-widest ml-2">Proof of Identity & Address (PDF/Image)</label>
@@ -705,16 +751,17 @@ export default function UserDashboard() {
 
                   <button 
                     onClick={async () => {
-                      if (!providerProfile.ficaDocUrl) return alert('Please upload a document');
+                      if (!providerProfile.ficaDocUrl) return showToast('Please upload a document first', 'error');
                       setUpdating(true);
                       try {
                         await updateDoc(doc(db, 'providers', user!.uid), {
                           ficaDocUrl: providerProfile.ficaDocUrl,
                           isVerified: 'pending'
                         });
-                        alert('Documents submitted!');
+                        showToast('Documents submitted successfully for review!');
                       } catch (e) {
                         handleFirestoreError(e, OperationType.UPDATE, 'providers');
+                        showToast('Failed to submit documents.', 'error');
                       } finally {
                         setUpdating(false);
                       }

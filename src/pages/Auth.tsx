@@ -380,9 +380,33 @@ export default function AuthPage() {
               )}
             </button>
             {resetSent && (
-              <p className="text-xs text-indigo-600 font-bold ml-2 mt-2 text-center bg-indigo-50 p-2 rounded-xl">
-                Password reset link sent! Check your inbox to set a password for manual login.
-              </p>
+              <div className="mt-4 p-5 bg-indigo-50/80 border border-indigo-100 rounded-2xl text-left font-sans text-xs">
+                <div className="flex items-center gap-2 text-indigo-700 font-black uppercase tracking-wider mb-2">
+                  <span>✉️</span>
+                  <span>Reset Instruction Sent!</span>
+                </div>
+                <p className="text-slate-600 mb-3 leading-relaxed">
+                  We've triggered a password reset request. Please check your email inbox to proceed. 
+                </p>
+                <div className="bg-white p-3.5 rounded-xl border border-indigo-100/60 font-mono text-[11px] text-slate-700 space-y-2">
+                  <div className="text-slate-400 font-bold uppercase text-[9px] tracking-wider">Email Content Template:</div>
+                  <p className="font-semibold text-slate-800">"Follow this link to reset your PinYourPro App"</p>
+                  <p className="text-slate-500 pt-1 border-t border-slate-50">Thanks, Pin Your Pro Team</p>
+                </div>
+                <div className="mt-4 pt-3 border-t border-indigo-100 flex flex-col gap-2">
+                  <p className="text-[10px] text-indigo-600 font-bold">
+                    💡 Customize your Firebase template dynamically in the console:
+                  </p>
+                  <a 
+                    href="https://console.firebase.google.com/project/gen-lang-client-0955914819/authentication/emails"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                  >
+                    Open Firebase Console Emails
+                  </a>
+                </div>
+              </div>
             )}
           </form>
 
