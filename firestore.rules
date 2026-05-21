@@ -106,8 +106,8 @@ service cloud.firestore {
     }
 
     match /providers/{providerId} {
-      allow get: if true;
-      allow list: if true;
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
       allow create: if isOwner(providerId) && isValidProvider(incoming());
       allow update: if (isOwner(providerId) || isAdmin()) && (
         // Providers can't self-verify or change approval status
@@ -133,7 +133,7 @@ service cloud.firestore {
     }
 
     match /reviews/{reviewId} {
-      allow read: if true;
+      allow read: if isSignedIn();
       allow create: if isSignedIn() && isValidReview(incoming()) && 
                     get(/databases/$(database)/documents/bookings/$(incoming().bookingId)).data.status == 'completed' &&
                     get(/databases/$(database)/documents/bookings/$(incoming().bookingId)).data.customerId == request.auth.uid;

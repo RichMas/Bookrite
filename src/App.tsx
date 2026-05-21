@@ -90,9 +90,9 @@ export default function App() {
           <main className="pt-16">
             <Routes>
               <Route path="/" element={<Home />} />
-              <Route path="/browse" element={<Browse />} />
-              <Route path="/provider/:id" element={<ProviderDetail />} />
-              <Route path="/book/:id" element={<BookingPage />} />
+              <Route path="/browse" element={user ? <Browse /> : <Navigate to="/auth" />} />
+              <Route path="/provider/:id" element={user ? <ProviderDetail /> : <Navigate to="/auth" />} />
+              <Route path="/book/:id" element={user ? <BookingPage /> : <Navigate to="/auth" />} />
               <Route path="/auth" element={<AuthPage />} />
               <Route path="/dashboard" element={user ? <UserDashboard /> : <Navigate to="/auth" />} />
               <Route path="/admin" element={

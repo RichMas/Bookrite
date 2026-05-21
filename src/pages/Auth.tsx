@@ -96,7 +96,7 @@ export default function AuthPage() {
               user = result.user;
             } catch (createErr: any) {
               if (createErr.code === 'auth/email-already-in-use') {
-                setError('This admin email is registered. If you haven\'t set a password yet but previously used Google, please use "Forgot Password" to set a manual login password.');
+                setError('This admin email has already set a permanent custom password. Please enter your custom password, or click "Forgot Password" to set a new one. Remember, you do NOT need to be logged into Google or the browser to sign in!');
                 setLoading(false);
                 return;
               }
@@ -104,7 +104,7 @@ export default function AuthPage() {
             }
           } else if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
             if (isAdminEmail) {
-              throw new Error('Invalid credentials. If this is your first admin login, use password "123456" or "passkeys". Otherwise, set a password via "Forgot Password" or use Google.');
+              throw new Error('Incorrect credentials. If you set a permanent custom password previously, please enter it. If you forgot or want to reset it, click "Forgot Password" to change it instantly via email. No Google browser login needed!');
             }
             throw new Error('Invalid credentials. Please check your email and password.');
           } else if (err.code === 'auth/user-not-found') {
@@ -139,6 +139,13 @@ export default function AuthPage() {
       console.error('Email auth error:', err);
       if (err.code === 'auth/operation-not-allowed') {
         setError('Email/Password sign-in is not enabled in Firebase Console. Please go to Authentication -> Sign-in Method and enable "Email/Password".');
+      } else if (err.code === 'auth/email-already-in-use') {
+        setError('An account with this email already exists. We have switched you to "Sign In" mode below so you can sign in directly! If you forgot your password, please click "Forgot Password" to receive a reset link.');
+        setMode('signin');
+      } else if (err.code === 'auth/weak-password') {
+        setError('Password is too weak. Please use a password with at least 6 characters.');
+      } else if (err.code === 'auth/invalid-email') {
+        setError('Please enter a valid email address.');
       } else {
         setError(err.message || 'Authentication failed. Please check your credentials.');
       }
@@ -313,7 +320,13 @@ export default function AuthPage() {
                 <input 
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setEmail(val);
+                    if (ADMIN_EMAILS.includes(val.toLowerCase().trim())) {
+                      setRole('admin');
+                    }
+                  }}
                   required
                   placeholder="name@example.com"
                   className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl outline-none transition-all font-medium"
