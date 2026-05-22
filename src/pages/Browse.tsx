@@ -24,10 +24,7 @@ export default function Browse() {
     const fetchProviders = async () => {
       setLoading(true);
       try {
-        const q = category === 'All' 
-          ? query(collection(db, 'providers'), limit(20))
-          : query(collection(db, 'providers'), where('category', '==', category), limit(20));
-        
+        const q = query(collection(db, 'providers'), limit(150));
         const querySnapshot = await getDocs(q);
         const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
         setProviders(data);
@@ -38,16 +35,22 @@ export default function Browse() {
       }
     };
     fetchProviders();
-  }, [category]);
+  }, []);
 
   const filteredProviders = providers.filter(p => {
+    const matchesCategory = category === 'All' || 
+      p.category === category || 
+      (p.categories && p.categories.includes(category as any));
+
     const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || 
-      p.description.toLowerCase().includes(search.toLowerCase()) ||
-      p.location.toLowerCase().includes(search.toLowerCase());
+      (p.description && p.description.toLowerCase().includes(search.toLowerCase())) ||
+      (p.location && p.location.toLowerCase().includes(search.toLowerCase())) ||
+      (p.category && p.category.toLowerCase().includes(search.toLowerCase())) ||
+      (p.categories && p.categories.some(c => c.toLowerCase().includes(search.toLowerCase())));
     
     const matchesRating = p.rating >= minRating;
 
-    return matchesSearch && matchesRating;
+    return matchesCategory && matchesSearch && matchesRating;
   });
 
   return (
@@ -133,7 +136,7 @@ export default function Browse() {
                       <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-md flex flex-col h-full hover:shadow-xl hover:border-indigo-100 transition-all group">
                         <div className="flex items-start justify-between mb-4">
                           <div className="w-16 h-16 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-3xl shadow-inner group-hover:scale-105 transition-transform">
-                            {SERVICE_CATEGORIES.find(c => c.name === provider.category)?.icon || '💼'}
+                            {SERVICE_CATEGORIES.find(c => c.name === (provider.categories?.[0] || provider.category))?.icon || '💼'}
                           </div>
                           <div className="flex flex-col items-end gap-2">
                             <span className="px-3 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-bold rounded-full uppercase tracking-tighter">
@@ -148,7 +151,11 @@ export default function Browse() {
                         </div>
                         
                         <h3 className="text-xl font-bold text-slate-800 mb-1">{provider.name}</h3>
-                        <p className="text-sm text-indigo-600 font-semibold mb-3">{provider.category}</p>
+                        <p className="text-sm text-indigo-600 font-semibold mb-3">
+                          {provider.categories && provider.categories.length > 0 
+                            ? provider.categories.join(' • ') 
+                            : provider.category}
+                        </p>
                         
                         <p className="text-sm text-slate-500 mb-6 line-clamp-2 italic leading-relaxed h-10">
                           {provider.description || "Expert services tailored to your specific needs and schedule."}

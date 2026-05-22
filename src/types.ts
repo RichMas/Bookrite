@@ -75,6 +75,7 @@ export interface ProviderProfile {
   uid: string;
   name: string;
   category: Category;
+  categories?: Category[];
   description: string;
   location: string;
   photoURL?: string;

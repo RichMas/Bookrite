@@ -133,10 +133,18 @@ export default function ProviderDetail() {
               />
               <div className="flex-1">
                 <div className="flex flex-wrap items-center gap-3 mb-2">
-                  <span className="px-3 py-1 bg-purple-50 text-purple-600 rounded-full text-xs font-bold uppercase tracking-wider">
-                    {provider.category}
-                  </span>
-                  <div className="flex items-center gap-1 text-orange-500 font-bold">
+                  {provider.categories && provider.categories.length > 0 ? (
+                    provider.categories.map((cat) => (
+                      <span key={cat} className="px-3 py-1 bg-purple-50 text-purple-600 rounded-full text-xs font-bold uppercase tracking-wider">
+                        {cat}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="px-3 py-1 bg-purple-50 text-purple-600 rounded-full text-xs font-bold uppercase tracking-wider">
+                      {provider.category}
+                    </span>
+                  )}
+                  <div className="flex items-center gap-1 text-orange-500 font-bold ml-2">
                     <Star size={18} fill="currentColor" />
                     <span>{averageRating.toFixed(1)}</span>
                     <span className="text-gray-400 font-medium text-sm">({reviewCount} reviews)</span>

@@ -69,6 +69,7 @@ export default function UserDashboard() {
   // Provider Settings Form
   const [pName, setPName] = useState('');
   const [pCategory, setPCategory] = useState<any>('Tutor');
+  const [pCategories, setPCategories] = useState<string[]>([]);
   const [pDescription, setPDescription] = useState('');
   const [pLocation, setPLocation] = useState('');
 
@@ -109,6 +110,7 @@ export default function UserDashboard() {
             setProviderProfile(data);
             setPName(data.name || '');
             setPCategory(data.category || 'Tutor');
+            setPCategories(data.categories || (data.category ? [data.category] : ['Tutor']));
             setPDescription(data.description || '');
             setPLocation(data.location || '');
           }
@@ -147,20 +149,58 @@ export default function UserDashboard() {
     }
   };
 
+  const toggleCategory = (catName: string) => {
+    setPCategories((prev) => {
+      let next;
+      if (prev.includes(catName)) {
+        if (prev.length <= 1) {
+          showToast('You must keep at least one category selected.', 'error');
+          return prev;
+        }
+        next = prev.filter(c => c !== catName);
+      } else {
+        next = [...prev, catName];
+      }
+      if (next.length > 0) {
+        setPCategory(next[0]);
+      }
+      return next;
+    });
+  };
+
   const handleUpdateProvider = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    if (pCategories.length === 0) {
+      showToast('Please select at least one service category.', 'error');
+      return;
+    }
     setUpdating(true);
     try {
-      await setDoc(doc(db, 'providers', user.uid), {
+      // Main category for backwards compatibility
+      const mainCategory = pCategories[0] || pCategory || 'Tutor';
+      
+      const updatedFields = {
         uid: user.uid,
         name: pName,
-        category: pCategory,
+        category: mainCategory,
+        categories: pCategories,
         description: pDescription,
         location: pLocation,
         photoURL: profile?.photoURL || '',
         updatedAt: serverTimestamp(),
-      }, { merge: true });
+      };
+      
+      await setDoc(doc(db, 'providers', user.uid), updatedFields, { merge: true });
+      
+      // Update local state so it flows instantly to active tabs like "Manage Services"
+      setProviderProfile(prev => prev ? {
+        ...prev,
+        ...updatedFields,
+        category: mainCategory,
+        categories: pCategories as any
+      } : null);
+      
       showToast('Provider profile updated successfully!');
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `providers/${user.uid}`);
@@ -439,70 +479,89 @@ export default function UserDashboard() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
                   <div>
                     <h2 className="text-3xl font-black text-gray-900">Manage Services</h2>
-                    <p className="text-gray-500 font-medium">Select the services you offer. Pricing is locked to platform standards.</p>
+                    <p className="text-gray-500 font-medium font-sans">Select the services you offer from each section. Pricing is locked to platform standards.</p>
                   </div>
                   <div className="bg-indigo-50 px-4 py-2 rounded-2xl border border-indigo-100 flex items-center gap-2">
-                    <span className="text-indigo-600 font-black tracking-widest text-[10px] uppercase">My Category:</span>
-                    <span className="text-indigo-900 font-bold text-sm">{providerProfile.category}</span>
+                    <span className="text-indigo-600 font-black tracking-widest text-[10px] uppercase">Categories Selected:</span>
+                    <span className="text-indigo-900 font-bold text-sm">
+                      {providerProfile.categories && providerProfile.categories.length > 0
+                        ? providerProfile.categories.length
+                        : 1}
+                    </span>
                   </div>
                 </div>
 
-                <div className="grid gap-6">
+                <div className="grid gap-12">
                   {(() => {
-                    const categoryData = SERVICE_CATEGORIES.find(c => c.name === providerProfile.category);
-                    if (!categoryData) return <div className="p-12 text-center bg-gray-50 rounded-[3rem]">Please select a valid category in Settings.</div>;
+                    const activeCategories = providerProfile.categories && providerProfile.categories.length > 0
+                      ? providerProfile.categories
+                      : [providerProfile.category || 'Tutor'];
+
+                    const categoriesData = SERVICE_CATEGORIES.filter(c => activeCategories.includes(c.name as any));
+                    if (categoriesData.length === 0) return <div className="p-12 text-center bg-gray-50 rounded-[3rem]">Please select a valid category in Settings first.</div>;
 
                     return (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {categoryData.services.map((service, idx) => {
-                          const isSelected = providerProfile.services?.some(s => s.name === service.name);
-                          
-                          return (
-                            <button 
-                              key={idx}
-                              onClick={() => {
-                                let newServices = [...(providerProfile.services || [])];
-                                if (isSelected) {
-                                  newServices = newServices.filter(s => s.name !== service.name);
-                                } else {
-                                  newServices.push({
-                                    id: Math.random().toString(36).substr(2, 9),
-                                    name: service.name,
-                                    description: categoryData.name + ' Service',
-                                    price: service.price,
-                                    duration: '60 min',
-                                    unit: (service as any).unit,
-                                    custom: service.custom
-                                  });
-                                }
-                                setProviderProfile({...providerProfile, services: newServices});
-                              }}
-                              className={`p-6 rounded-[2rem] border-2 text-left transition-all relative group ${
-                                isSelected 
-                                ? 'border-indigo-500 bg-indigo-50/50 shadow-lg shadow-indigo-100' 
-                                : 'border-gray-100 bg-white hover:border-gray-300'
-                              }`}
-                            >
-                              <div className="flex justify-between items-start mb-4">
-                                <span className="text-2xl">{categoryData.icon}</span>
-                                {isSelected && (
-                                  <div className="w-6 h-6 bg-indigo-600 rounded-lg flex items-center justify-center text-white">
-                                    <Check size={14} />
-                                  </div>
-                                )}
-                              </div>
-                              <h3 className="font-black text-slate-900 mb-2 leading-tight">{service.name}</h3>
-                              <p className="text-lg font-black text-indigo-600">
-                                {service.custom ? 'Custom Quote' : `R${service.price.toLocaleString()}${ (service as any).unit || '' }`}
-                              </p>
-                              <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <span className={`text-[10px] font-black uppercase tracking-widest ${isSelected ? 'text-indigo-400' : 'text-slate-300'}`}>
-                                  {isSelected ? 'Click to remove' : 'Click to add'}
-                                </span>
-                              </div>
-                            </button>
-                          );
-                        })}
+                      <div className="space-y-12">
+                        {categoriesData.map((categoryData) => (
+                          <div key={categoryData.name} className="space-y-6">
+                            <div className="flex items-center gap-3 border-b border-gray-150 pb-3">
+                              <span className="text-3xl">{categoryData.icon}</span>
+                              <h3 className="text-xl font-extrabold text-gray-900">{categoryData.name}</h3>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                              {categoryData.services.map((service, idx) => {
+                                const isSelected = providerProfile.services?.some(s => s.name === service.name);
+                                
+                                return (
+                                  <button 
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => {
+                                      let newServices = [...(providerProfile.services || [])];
+                                      if (isSelected) {
+                                        newServices = newServices.filter(s => s.name !== service.name);
+                                      } else {
+                                        newServices.push({
+                                          id: Math.random().toString(36).substr(2, 9),
+                                          name: service.name,
+                                          description: categoryData.name + ' Service',
+                                          price: service.price,
+                                          duration: '60 min',
+                                          unit: (service as any).unit,
+                                          custom: service.custom
+                                        });
+                                      }
+                                      setProviderProfile({...providerProfile, services: newServices});
+                                    }}
+                                    className={`p-6 rounded-[2rem] border-2 text-left transition-all relative group ${
+                                      isSelected 
+                                      ? 'border-indigo-500 bg-indigo-50/50 shadow-lg shadow-indigo-100' 
+                                      : 'border-gray-100 bg-white hover:border-gray-300'
+                                    }`}
+                                  >
+                                    <div className="flex justify-between items-start mb-4">
+                                      <span className="text-2xl">{categoryData.icon}</span>
+                                      {isSelected && (
+                                        <div className="w-6 h-6 bg-indigo-600 rounded-lg flex items-center justify-center text-white">
+                                          <Check size={14} />
+                                        </div>
+                                      )}
+                                    </div>
+                                    <h3 className="font-black text-slate-900 mb-2 leading-tight">{service.name}</h3>
+                                    <p className="text-lg font-black text-indigo-600">
+                                      {service.custom ? 'Custom Quote' : `R${service.price.toLocaleString()}${ (service as any).unit || '' }`}
+                                    </p>
+                                    <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <span className={`text-[10px] font-black uppercase tracking-widest ${isSelected ? 'text-indigo-400' : 'text-slate-300'}`}>
+                                        {isSelected ? 'Click to remove' : 'Click to add'}
+                                      </span>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     );
                   })()}
@@ -798,17 +857,38 @@ export default function UserDashboard() {
                       />
                     </div>
 
-                    <div className="space-y-2">
-                      <label className="text-sm font-bold text-gray-700 ml-2">Service Category</label>
-                        <select 
-                          value={pCategory}
-                          onChange={(e) => setPCategory(e.target.value as any)}
-                          className="w-full px-6 py-4 bg-gray-50 border-2 border-transparent focus:border-purple-600 focus:bg-white rounded-2xl outline-none transition-all font-medium appearance-none"
-                        >
-                          {SERVICE_CATEGORIES.map(cat => (
-                            <option key={cat.name} value={cat.name}>{cat.name}</option>
-                          ))}
-                        </select>
+                    <div className="space-y-3">
+                      <div className="flex flex-col ml-2">
+                        <label className="text-sm font-bold text-gray-700">Service Categories</label>
+                        <span className="text-xs text-slate-400 font-medium font-sans">Select all categories that apply to your business. You can choose more than one!</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-72 overflow-y-auto p-2 border border-inset border-gray-100 rounded-3xl bg-gray-50/50">
+                        {SERVICE_CATEGORIES.map(cat => {
+                          const isSelected = pCategories.includes(cat.name);
+                          return (
+                            <button
+                              key={cat.name}
+                              type="button"
+                              onClick={() => toggleCategory(cat.name)}
+                              className={`flex items-center justify-between p-4 rounded-2xl border-2 text-left transition-all font-sans font-bold text-sm ${
+                                isSelected
+                                  ? 'border-purple-600 bg-purple-50 text-purple-900 shadow-md shadow-purple-50/50'
+                                  : 'border-transparent bg-white text-slate-700 hover:border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-xl shrink-0">{cat.icon}</span>
+                                <span className="leading-tight">{cat.name}</span>
+                              </div>
+                              {isSelected && (
+                                <div className="w-5 h-5 bg-purple-600 text-white rounded-md flex items-center justify-center shrink-0">
+                                  <Check size={12} strokeWidth={3} />
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
 
                     <div className="space-y-2">
