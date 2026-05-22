@@ -103,6 +103,7 @@ service cloud.firestore {
         incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL']) ||
         isAdmin()
       );
+      allow delete: if isAdmin();
     }
 
     match /providers/{providerId} {

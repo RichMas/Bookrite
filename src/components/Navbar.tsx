@@ -35,21 +35,29 @@ export default function Navbar() {
           {user ? (
             <div className="flex items-center gap-4">
               {(profile?.role === 'admin' || user.email === 'paragonbusinessconsult@gmail.com' || user.email === 'sithembiledlaza8@gmail.com') && (
-                <Link to="/admin" className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-full transition-all">
-                  <Shield size={20} />
+                <Link 
+                  to="/admin" 
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-full border border-red-100 transition-all"
+                >
+                  <Shield size={14} />
+                  <span>Admin Panel</span>
                 </Link>
               )}
-              <Link to="/dashboard" className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-full transition-all">
-                <LayoutDashboard size={20} />
+              <Link 
+                to="/dashboard" 
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-full border border-indigo-100 transition-all"
+              >
+                <LayoutDashboard size={14} />
+                <span>My Dashboard</span>
               </Link>
               <div className="flex items-center gap-3 pl-4 border-l border-slate-100">
-                <div className="text-right">
+                <div className="text-right font-sans">
                   <p className="text-sm font-semibold text-slate-800 leading-none">{profile?.displayName || 'User'}</p>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">{profile?.role}</p>
                 </div>
                 <button 
                   onClick={handleSignOut}
-                  className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"
+                  className="p-2 text-slate-450 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"
                 >
                   <LogOut size={20} />
                 </button>

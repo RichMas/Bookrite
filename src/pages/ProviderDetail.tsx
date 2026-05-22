@@ -109,7 +109,7 @@ export default function ProviderDetail() {
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       <button 
-        onClick={() => navigate(-1)}
+        onClick={() => navigate('/browse')}
         className="flex items-center gap-2 text-gray-500 hover:text-purple-600 transition-colors mb-8 font-medium"
       >
         <ArrowLeft size={20} />
@@ -318,18 +318,32 @@ export default function ProviderDetail() {
                   <h2 className="text-2xl font-bold text-gray-900 mb-6">Services Offered</h2>
                   <div className="grid gap-4">
                     {provider.services.map((service) => (
-                      <div key={service.id} className="flex flex-col md:flex-row md:items-center justify-between p-6 bg-gray-50 rounded-[2rem] border border-transparent hover:border-indigo-200 transition-all">
+                      <div key={service.id} className="flex flex-col md:flex-row md:items-center justify-between p-6 bg-gray-50 rounded-[2rem] border border-transparent hover:border-indigo-200 transition-all gap-4">
                         <div>
                           <h4 className="text-lg font-black text-gray-900">{service.name}</h4>
                           <p className="text-gray-500 text-sm mt-1">{service.description}</p>
                         </div>
-                        <div className="mt-4 md:mt-0 flex items-center gap-4">
-                          <div className="text-right">
+                        <div className="mt-4 md:mt-0 flex items-center gap-6 self-stretch justify-between md:justify-end shrink-0">
+                          <div className="text-right md:min-w-[100px]">
                             <p className="text-xl font-black text-purple-600">
                               {service.custom ? 'Custom Quote' : `R${service.price}${service.unit || ''}`}
                             </p>
                             <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{service.duration}</p>
                           </div>
+                          <button
+                            onClick={() => {
+                              setSelectedServiceId(service.id);
+                              setSelectedSlot(null);
+                              document.getElementById('availability')?.scrollIntoView({ behavior: 'smooth' });
+                            }}
+                            className={`px-5 py-3 rounded-xl text-xs font-extrabold uppercase tracking-widest transition-all ${
+                              selectedServiceId === service.id
+                                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 font-sans'
+                                : 'bg-white border-2 border-slate-100 text-slate-700 hover:border-indigo-300 font-sans'
+                            }`}
+                          >
+                            {selectedServiceId === service.id ? 'Selected' : 'Pick Service'}
+                          </button>
                         </div>
                       </div>
                     ))}

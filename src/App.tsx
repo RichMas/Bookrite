@@ -103,6 +103,7 @@ export default function App() {
                 ) : <Navigate to="/auth" />
               } />
               <Route path="/terms" element={<Terms />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </main>
           <Footer />

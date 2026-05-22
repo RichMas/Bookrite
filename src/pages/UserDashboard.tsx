@@ -68,7 +68,7 @@ export default function UserDashboard() {
   
   // Provider Settings Form
   const [pName, setPName] = useState('');
-  const [pCategory, setPCategory] = useState<any>('Tutor');
+  const [pCategory, setPCategory] = useState<any>('Tutors');
   const [pCategories, setPCategories] = useState<string[]>([]);
   const [pDescription, setPDescription] = useState('');
   const [pLocation, setPLocation] = useState('');
@@ -109,10 +109,39 @@ export default function UserDashboard() {
             const data = pSnap.data() as ProviderProfile;
             setProviderProfile(data);
             setPName(data.name || '');
-            setPCategory(data.category || 'Tutor');
-            setPCategories(data.categories || (data.category ? [data.category] : ['Tutor']));
+            setPCategory(data.category || 'Tutors');
+            setPCategories(data.categories || (data.category ? [data.category] : ['Tutors']));
             setPDescription(data.description || '');
             setPLocation(data.location || '');
+          } else {
+            // New provider, create dummy / empty profile in state so they can use "Manage Services" and "Availability" tabs!
+            const newObj: ProviderProfile = {
+              uid: user.uid,
+              name: profile.displayName || '',
+              category: 'Tutors',
+              categories: ['Tutors'],
+              description: '',
+              location: '',
+              rating: 5,
+              reviewCount: 0,
+              isApproved: true,
+              isVerified: 'none',
+              services: [],
+              availability: {
+                monday: { enabled: true, slots: ['09:00 AM', '10:00 AM', '11:00 AM', '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'] },
+                tuesday: { enabled: true, slots: ['09:00 AM', '10:00 AM', '11:00 AM', '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'] },
+                wednesday: { enabled: true, slots: ['09:00 AM', '10:00 AM', '11:00 AM', '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'] },
+                thursday: { enabled: true, slots: ['09:00 AM', '10:00 AM', '11:00 AM', '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'] },
+                friday: { enabled: true, slots: ['09:00 AM', '10:00 AM', '11:00 AM', '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'] },
+                saturday: { enabled: false, slots: [] },
+                sunday: { enabled: false, slots: [] },
+              },
+              createdAt: new Date(),
+            };
+            setProviderProfile(newObj);
+            setPName(newObj.name);
+            setPCategory(newObj.category);
+            setPCategories(newObj.categories || ['Tutors']);
           }
         }
       } catch (error) {
@@ -570,9 +599,9 @@ export default function UserDashboard() {
                     onClick={async () => {
                       setUpdating(true);
                       try {
-                        await updateDoc(doc(db, 'providers', user!.uid), {
-                          services: providerProfile.services
-                        });
+                        await setDoc(doc(db, 'providers', user!.uid), {
+                          services: providerProfile.services || []
+                        }, { merge: true });
                         showToast('Selected services have been saved successfully!');
                       } catch (e) {
                         handleFirestoreError(e, OperationType.UPDATE, 'providers');
@@ -581,7 +610,7 @@ export default function UserDashboard() {
                         setUpdating(false);
                       }
                     }}
-                    disabled={updating || !providerProfile.services?.length}
+                    disabled={updating}
                     className="w-full py-5 bg-emerald-500 text-white rounded-[2rem] font-black text-xl hover:bg-emerald-600 transition-all shadow-xl shadow-emerald-100 flex items-center justify-center gap-3 mt-8 disabled:opacity-50"
                   >
                     <Save size={24} />

@@ -100,8 +100,8 @@ export default function AdminPanel() {
         getDocs(query(collection(db, 'bookings'), limit(50)))
       ]);
       
-      setUsers(uSnap.docs.map(d => ({ ...d.data() } as UserProfile)));
-      setProviders(pSnap.docs.map(d => ({ ...d.data() } as ProviderProfile)));
+      setUsers(uSnap.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile)));
+      setProviders(pSnap.docs.map(d => ({ uid: d.id, ...d.data() } as ProviderProfile)));
       setBookings(bSnap.docs.map(d => ({ id: d.id, ...d.data() } as Booking)));
     } catch (error) {
       console.error(error);
