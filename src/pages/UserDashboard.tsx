@@ -243,23 +243,77 @@ export default function UserDashboard() {
     if (!user || !selectedBookingForReview || !comment.trim()) return;
     setSubmittingReview(true);
     try {
-      await addDoc(collection(db, 'reviews'), {
-        bookingId: selectedBookingForReview.id,
-        customerId: user.uid,
-        customerName: profile?.displayName || 'Anonymous User',
-        providerId: selectedBookingForReview.providerId,
-        rating,
-        comment,
-        createdAt: serverTimestamp(),
-      });
+      if (profile?.role === 'provider') {
+        // Provider is rating Customer
+        await addDoc(collection(db, 'customer_reviews'), {
+          bookingId: selectedBookingForReview.id,
+          providerId: user.uid,
+          providerName: profile?.displayName || 'Anonymous Provider',
+          customerId: selectedBookingForReview.customerId,
+          rating,
+          comment,
+          createdAt: serverTimestamp(),
+        });
 
-      // Mark booking as reviewed
-      await updateDoc(doc(db, 'bookings', selectedBookingForReview.id), {
-        isReviewed: true
-      });
+        // Update the booking doc
+        await updateDoc(doc(db, 'bookings', selectedBookingForReview.id), {
+          providerRated: true
+        });
 
-      setBookings(prev => prev.map(b => b.id === selectedBookingForReview.id ? { ...b, isReviewed: true } : b));
-      showToast('Review submitted successfully!');
+        // Update customer profile rating & reviewCount
+        const uRef = doc(db, 'users', selectedBookingForReview.customerId);
+        const uSnap = await getDoc(uRef);
+        if (uSnap.exists()) {
+          const uData = uSnap.data();
+          const currentCount = uData.reviewCount || 0;
+          const currentRating = uData.rating || 5;
+          const newCount = currentCount + 1;
+          const newRating = ((currentRating * currentCount) + rating) / newCount;
+          await updateDoc(uRef, {
+            rating: newRating,
+            reviewCount: newCount
+          });
+        }
+
+        setBookings(prev => prev.map(b => b.id === selectedBookingForReview.id ? { ...b, providerRated: true } : b));
+        showToast('Customer rated successfully!');
+      } else {
+        // Customer is rating Provider
+        await addDoc(collection(db, 'reviews'), {
+          bookingId: selectedBookingForReview.id,
+          customerId: user.uid,
+          customerName: profile?.displayName || 'Anonymous User',
+          providerId: selectedBookingForReview.providerId,
+          rating,
+          comment,
+          createdAt: serverTimestamp(),
+        });
+
+        // Update booking doc
+        await updateDoc(doc(db, 'bookings', selectedBookingForReview.id), {
+          isReviewed: true,
+          customerRated: true
+        });
+
+        // Update provider profile rating & reviewCount
+        const pRef = doc(db, 'providers', selectedBookingForReview.providerId);
+        const pSnap = await getDoc(pRef);
+        if (pSnap.exists()) {
+          const pData = pSnap.data();
+          const currentCount = pData.reviewCount || 0;
+          const currentRating = pData.rating || 5;
+          const newCount = currentCount + 1;
+          const newRating = ((currentRating * currentCount) + rating) / newCount;
+          await updateDoc(pRef, {
+            rating: newRating,
+            reviewCount: newCount
+          });
+        }
+
+        setBookings(prev => prev.map(b => b.id === selectedBookingForReview.id ? { ...b, isReviewed: true, customerRated: true } : b));
+        showToast('Provider review submitted successfully!');
+      }
+
       setReviewModalOpen(false);
       setComment('');
       setRating(5);
@@ -454,9 +508,26 @@ export default function UserDashboard() {
                             </button>
                           )}
                           {profile?.role === 'provider' && booking.status === 'completed' && (
-                            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600 bg-emerald-50 px-3 py-1 rounded-lg">
-                              {booking.payoutStatus === 'paid_to_provider' ? 'Paid to you' : 'Processing Payout'}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              {booking.providerRated ? (
+                                <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg flex items-center gap-1">
+                                  <Star size={12} fill="currentColor" /> Customer Rated
+                                </span>
+                              ) : (
+                                <button 
+                                  onClick={() => {
+                                    setSelectedBookingForReview(booking);
+                                    setReviewModalOpen(true);
+                                  }}
+                                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md shadow-indigo-100 transition-all hover:-translate-y-0.5"
+                                >
+                                  Rate Customer
+                                </button>
+                              )}
+                              <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600 bg-emerald-50 px-3 py-1 rounded-lg">
+                                {booking.payoutStatus === 'paid_to_provider' ? 'Paid to you' : 'Processing Payout'}
+                              </span>
+                            </div>
                           )}
                           {profile?.role === 'customer' && booking.status === 'completed' && !booking.isReviewed && (
                             <button 
@@ -1228,16 +1299,22 @@ export default function UserDashboard() {
                       </button>
                     ))}
                   </div>
-                  <p className="text-slate-500 font-bold">How was your session with {selectedBookingForReview?.providerName}?</p>
+                  <p className="text-slate-500 font-bold">
+                    How was your experience with {profile?.role === 'provider' ? selectedBookingForReview?.customerName : selectedBookingForReview?.providerName}?
+                  </p>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-2">Your Feedback</label>
+                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-2">Comments & Notes</label>
                   <textarea 
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
                     rows={4}
-                    placeholder="Tell others what you liked or how they can improve..."
+                    placeholder={
+                      profile?.role === 'provider' 
+                        ? 'Write key notes regarding guidelines adherence, prompt payment, communication, etc...' 
+                        : 'Tell others what you liked or how they can improve...'
+                    }
                     className="w-full px-6 py-4 bg-slate-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl outline-none transition-all font-medium resize-none"
                   />
                 </div>

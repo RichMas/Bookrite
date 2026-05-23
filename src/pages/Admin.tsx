@@ -115,10 +115,30 @@ export default function AdminPanel() {
   }, []);
 
   const handleDelete = async (coll: string, id: string) => {
-    if (!window.confirm('Are you sure? This action is irreversible.')) return;
+    if (!window.confirm('Are you sure? This action is irreversible. This will remove their profile and database accessibility immediately.')) return;
     try {
-      await deleteDoc(doc(db, coll, id));
-      fetchData();
+      if (coll === 'providers') {
+        // Remove the provider profile listing
+        await deleteDoc(doc(db, 'providers', id));
+        // Demote user role back to customer
+        try {
+          await updateDoc(doc(db, 'users', id), { role: 'customer' });
+        } catch (e) {
+          console.warn("Could not demote user (perhaps already deleted):", e);
+        }
+      } else if (coll === 'users') {
+        // Remove user document
+        await deleteDoc(doc(db, 'users', id));
+        // Also clear out provider profile if existing
+        try {
+          await deleteDoc(doc(db, 'providers', id));
+        } catch (e) {
+          console.warn("Could not cascading-delete provider profile:", e);
+        }
+      } else {
+        await deleteDoc(doc(db, coll, id));
+      }
+      await fetchData();
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `${coll}/${id}`);
     }

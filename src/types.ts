@@ -7,6 +7,8 @@ export interface UserProfile {
   photoURL?: string;
   role: UserRole;
   createdAt: any;
+  rating?: number;
+  reviewCount?: number;
 }
 
 export interface Review {
@@ -83,7 +85,12 @@ export interface ProviderProfile {
   reviewCount: number;
   isApproved: boolean;
   isVerified: 'pending' | 'verified' | 'rejected' | 'requirements' | 'none';
+  email?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
   ficaDocUrl?: string;
+  ficaFileName?: string;
   verificationFeedback?: string;
   services: ServiceItem[];
   availability: Record<string, DayAvailability>; // "monday", "tuesday", etc.
@@ -106,5 +113,7 @@ export interface Booking {
   totalAmount: number;
   paymentStatus: 'unpaid' | 'paid';
   payoutStatus: 'pending' | 'paid_to_provider';
+  customerRated?: boolean;
+  providerRated?: boolean;
   createdAt: any;
 }
