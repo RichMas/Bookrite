@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../App';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, query, where, getDocs, updateDoc, doc, getDoc, serverTimestamp, setDoc, addDoc, onSnapshot, orderBy } from 'firebase/firestore';
+import { deleteUser } from 'firebase/auth';
+import { db, handleFirestoreError, OperationType, auth } from '../firebase';
+import { collection, query, where, getDocs, updateDoc, doc, getDoc, serverTimestamp, setDoc, addDoc, onSnapshot, orderBy, deleteDoc } from 'firebase/firestore';
 import { Booking, ProviderProfile, ServiceItem, Review, Chat } from '../types';
 import { 
   User, 
@@ -173,6 +174,35 @@ export default function UserDashboard() {
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
       showToast('Failed to update profile.', 'error');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleDeleteMyAccount = async () => {
+    if (!user) return;
+    const confirmDelete = window.confirm(
+      "WARNING: This will permanently delete your profile, listing, and all associated account data on PinYourPro. This action cannot be undone. Are you sure you want to proceed?"
+    );
+    if (!confirmDelete) return;
+
+    setUpdating(true);
+    try {
+      await deleteDoc(doc(db, 'users', user.uid));
+      await deleteDoc(doc(db, 'providers', user.uid));
+      await deleteUser(user);
+      
+      alert('Your account and database record have been completely and permanently deleted.');
+      window.location.href = '/';
+    } catch (error: any) {
+      console.error("Error deleting account:", error);
+      if (error?.code === 'auth/requires-recent-login') {
+        alert('For security reasons, you must log in again before completing this action.');
+        await auth.signOut();
+        window.location.href = '/auth';
+      } else {
+        showToast('Error deleting account. Please contact support.', 'error');
+      }
     } finally {
       setUpdating(false);
     }
@@ -574,39 +604,100 @@ export default function UserDashboard() {
                 key="services"
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
-                className="space-y-6"
+                className="space-y-8"
               >
-                <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div>
-                    <h2 className="text-3xl font-black text-gray-900">Manage Services</h2>
-                    <p className="text-gray-500 font-medium font-sans">Select the services you offer from each section. Pricing is locked to platform standards.</p>
+                    <h2 className="text-3xl font-black text-slate-900">Manage Services</h2>
+                    <p className="text-sm font-medium text-slate-500 font-sans">Toggle categories and select specific standard services you offer below.</p>
                   </div>
-                  <div className="bg-indigo-50 px-4 py-2 rounded-2xl border border-indigo-100 flex items-center gap-2">
-                    <span className="text-indigo-600 font-black tracking-widest text-[10px] uppercase">Categories Selected:</span>
-                    <span className="text-indigo-900 font-bold text-sm">
-                      {providerProfile.categories && providerProfile.categories.length > 0
-                        ? providerProfile.categories.length
-                        : 1}
+                  <div className="bg-indigo-50 px-5 py-2.5 rounded-2xl border border-indigo-100 flex items-center gap-2 self-start md:self-auto">
+                    <span className="text-indigo-650 font-black tracking-widest text-[10px] uppercase">Active Modules:</span>
+                    <span className="text-indigo-900 font-black text-sm">
+                      {providerProfile.categories?.length || 0}
                     </span>
                   </div>
                 </div>
 
-                <div className="grid gap-12">
+                {/* Step 1: Inline Category Selection Options */}
+                <div className="bg-slate-50 p-7 rounded-[2.5rem] border border-slate-200/50">
+                  <h3 className="text-stone-900 font-black flex items-center gap-2 mb-1.5 text-lg">
+                    <span className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-black font-mono">1</span>
+                    Select Your Business Categories
+                  </h3>
+                  <p className="text-xs text-slate-500 font-semibold mb-6">Which service divisions do you operate in? Select as many as apply to your company.</p>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                    {SERVICE_CATEGORIES.map((cat) => {
+                      const isSelected = providerProfile.categories?.includes(cat.name) || false;
+                      return (
+                        <button
+                          key={cat.name}
+                          type="button"
+                          onClick={() => {
+                            let updatedCategories = [...(providerProfile.categories || [])];
+                            if (isSelected) {
+                              updatedCategories = updatedCategories.filter(name => name !== cat.name);
+                            } else {
+                              updatedCategories.push(cat.name);
+                            }
+                            // Sync state
+                            setProviderProfile({
+                              ...providerProfile,
+                              categories: updatedCategories,
+                              category: updatedCategories[0] || 'Lessons & Tutors'
+                            });
+                          }}
+                          className={`p-4 rounded-2xl border-2 text-center transition-all flex flex-col items-center justify-center gap-2 relative h-28 ${
+                            isSelected 
+                              ? 'border-indigo-600 bg-indigo-50 text-indigo-700 shadow-md shadow-indigo-100/40'
+                              : 'border-slate-200 bg-white text-slate-705 hover:border-slate-350 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span className="text-2xl">{cat.icon}</span>
+                          <span className="text-xs font-black tracking-tight leading-tight">{cat.name}</span>
+                          {isSelected && (
+                            <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-indigo-600 text-white flex items-center justify-center">
+                              <Check size={9} strokeWidth={4} />
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Step 2: Bookable Services List Selection */}
+                <div className="space-y-6">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-black font-mono">2</span>
+                    <h3 className="text-stone-900 font-black text-lg">Select Offered Services</h3>
+                  </div>
+
                   {(() => {
                     const activeCategories = providerProfile.categories && providerProfile.categories.length > 0
                       ? providerProfile.categories
-                      : [providerProfile.category || 'Tutor'];
+                      : [];
 
                     const categoriesData = SERVICE_CATEGORIES.filter(c => activeCategories.includes(c.name as any));
-                    if (categoriesData.length === 0) return <div className="p-12 text-center bg-gray-50 rounded-[3rem]">Please select a valid category in Settings first.</div>;
+                    
+                    if (categoriesData.length === 0) {
+                      return (
+                        <div className="p-16 text-center bg-slate-50 rounded-[2.5rem] border border-dashed border-slate-200 text-slate-400">
+                          <span className="text-4xl">🛠️</span>
+                          <h4 className="text-lg font-black text-slate-700 mt-3">No Categories Selected Yet</h4>
+                          <p className="text-xs font-semibold mt-1 max-w-xs mx-auto text-slate-450">Please click and choose at least one business category in Step 1 to load standard bookable services!</p>
+                        </div>
+                      );
+                    }
 
                     return (
-                      <div className="space-y-12">
+                      <div className="space-y-12 bg-white p-2 rounded-3xl">
                         {categoriesData.map((categoryData) => (
-                          <div key={categoryData.name} className="space-y-6">
-                            <div className="flex items-center gap-3 border-b border-gray-150 pb-3">
+                          <div key={categoryData.name} className="space-y-5">
+                            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
                               <span className="text-3xl">{categoryData.icon}</span>
-                              <h3 className="text-xl font-extrabold text-gray-900">{categoryData.name}</h3>
+                              <h4 className="text-lg font-black text-slate-800">{categoryData.name}</h4>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                               {categoryData.services.map((service, idx) => {
@@ -627,34 +718,36 @@ export default function UserDashboard() {
                                           description: categoryData.name + ' Service',
                                           price: service.price,
                                           duration: '60 min',
-                                          unit: (service as any).unit,
-                                          custom: service.custom
+                                          unit: (service as any).unit || '',
+                                          custom: service.custom || false
                                         });
                                       }
                                       setProviderProfile({...providerProfile, services: newServices});
                                     }}
-                                    className={`p-6 rounded-[2rem] border-2 text-left transition-all relative group ${
+                                    className={`p-6 rounded-[2rem] border-2 text-left transition-all relative group h-44 flex flex-col justify-between ${
                                       isSelected 
-                                      ? 'border-indigo-500 bg-indigo-50/50 shadow-lg shadow-indigo-100' 
-                                      : 'border-gray-100 bg-white hover:border-gray-300'
+                                      ? 'border-indigo-600 bg-indigo-50/40 shadow-xl shadow-indigo-100/30' 
+                                      : 'border-slate-150 bg-white hover:border-slate-300 shadow-sm'
                                     }`}
                                   >
-                                    <div className="flex justify-between items-start mb-4">
-                                      <span className="text-2xl">{categoryData.icon}</span>
-                                      {isSelected && (
-                                        <div className="w-6 h-6 bg-indigo-600 rounded-lg flex items-center justify-center text-white">
-                                          <Check size={14} />
-                                        </div>
-                                      )}
+                                    <div>
+                                      <div className="flex justify-between items-start mb-2">
+                                        <span className="text-2xl">{categoryData.icon}</span>
+                                        {isSelected && (
+                                          <div className="w-5 h-5 bg-indigo-600 rounded-lg flex items-center justify-center text-white shrink-0 shadow-sm animate-scaleIn">
+                                            <Check size={12} strokeWidth={3} />
+                                          </div>
+                                        )}
+                                      </div>
+                                      <h5 className="font-extrabold text-slate-900 leading-tight group-hover:text-indigo-600 transition-colors">{service.name}</h5>
                                     </div>
-                                    <h3 className="font-black text-slate-900 mb-2 leading-tight">{service.name}</h3>
-                                    <p className="text-lg font-black text-indigo-600">
-                                      {service.custom ? 'Custom Quote' : `R${service.price.toLocaleString()}${ (service as any).unit || '' }`}
-                                    </p>
-                                    <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
-                                      <span className={`text-[10px] font-black uppercase tracking-widest ${isSelected ? 'text-indigo-400' : 'text-slate-300'}`}>
-                                        {isSelected ? 'Click to remove' : 'Click to add'}
-                                      </span>
+                                    <div>
+                                      <p className="text-xl font-black text-indigo-600">
+                                        {service.custom ? 'Custom Quote' : `R${service.price.toLocaleString()}${ (service as any).unit || '' }`}
+                                      </p>
+                                      <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
+                                        {isSelected ? '✓ Added' : '+ Add Service'}
+                                      </p>
                                     </div>
                                   </button>
                                 );
@@ -670,14 +763,12 @@ export default function UserDashboard() {
                     onClick={async () => {
                       setUpdating(true);
                       try {
-                        await setDoc(doc(db, 'providers', user!.uid), {
-                          uid: user.uid,
-                          name: providerProfile.name || profile?.displayName || 'New Provider',
-                          category: providerProfile.category || 'Tutors',
-                          categories: providerProfile.categories || ['Tutors'],
-                          location: providerProfile.location || '',
+                        const payload = {
+                          categories: providerProfile.categories && providerProfile.categories.length > 0 ? providerProfile.categories : ['Lessons & Tutors'],
+                          category: providerProfile.categories?.[0] || 'Lessons & Tutors',
                           services: providerProfile.services || []
-                        }, { merge: true });
+                        };
+                        await setDoc(doc(db, 'providers', user!.uid), payload, { merge: true });
                         showToast('Selected services have been saved successfully!');
                       } catch (e) {
                         handleFirestoreError(e, OperationType.UPDATE, 'providers');
@@ -687,7 +778,7 @@ export default function UserDashboard() {
                       }
                     }}
                     disabled={updating}
-                    className="w-full py-5 bg-emerald-500 text-white rounded-[2rem] font-black text-xl hover:bg-emerald-600 transition-all shadow-xl shadow-emerald-100 flex items-center justify-center gap-3 mt-8 disabled:opacity-50"
+                    className="w-full py-5 bg-emerald-500 text-white rounded-[2rem] font-black text-xl hover:bg-emerald-600 active:scale-95 transition-all shadow-xl shadow-emerald-100 flex items-center justify-center gap-3 mt-8 disabled:opacity-50"
                   >
                     <Save size={24} />
                     {updating ? 'Saving...' : 'Save Selected Services'}
@@ -1036,10 +1127,17 @@ export default function UserDashboard() {
                     {updating ? 'Updating Listing...' : 'Update Service Listing'}
                   </button>
 
-                  <div className="p-6 bg-purple-50 rounded-3xl text-purple-700 text-sm flex gap-4">
-                    <Star className="shrink-0" />
-                    <p>Your listing is currently <strong>public</strong>. Make sure your profile looks great to attract more clients!</p>
-                  </div>
+                   {providerProfile?.isVerified === 'verified' ? (
+                     <div className="p-6 bg-purple-50 rounded-3xl text-purple-700 text-sm flex gap-4">
+                       <Star className="shrink-0" />
+                       <p>Your listing is currently <strong>public</strong>. Make sure your profile looks great to attract more clients!</p>
+                     </div>
+                   ) : (
+                     <div className="p-6 bg-amber-50 rounded-3xl text-amber-800 text-sm flex gap-4 border border-amber-200/40">
+                       <AlertCircle className="shrink-0 text-amber-600" />
+                       <p>Your listing is currently <strong>private</strong> and pending verification. Once verified, your status will update automatically!</p>
+                     </div>
+                   )}
                 </form>
               </motion.div>
             )}
@@ -1158,6 +1256,24 @@ export default function UserDashboard() {
                     </button>
                   </div>
                 )}
+
+                {/* Danger Zone Self-Deletion */}
+                <div className="mt-12 p-8 bg-rose-50 rounded-[2.5rem] border border-rose-100">
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-rose-600 shadow-sm">
+                      <Trash2 size={24} />
+                    </div>
+                    <h3 className="text-xl font-black text-rose-900">Danger Zone</h3>
+                  </div>
+                  <p className="text-rose-700/70 font-medium mb-6">Permanently delete your user profile, service listings, active booking charts, and completely purge your account. This action cannot be reversed.</p>
+                  <button 
+                    onClick={handleDeleteMyAccount}
+                    className="w-full py-4 bg-rose-600 text-white rounded-2xl font-bold hover:bg-rose-700 transition-all shadow-lg shadow-rose-200 flex items-center justify-center gap-2"
+                  >
+                    <Trash2 size={20} />
+                    Permanently Delete My Account
+                  </button>
+                </div>
               </motion.div>
             )}
 

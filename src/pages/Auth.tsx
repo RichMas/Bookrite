@@ -17,6 +17,7 @@ import {
 import { doc, setDoc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { useAuth } from '../App';
 import { motion, AnimatePresence } from 'motion/react';
+import { sendEmailVerification } from 'firebase/auth';
 
 export default function AuthPage() {
   const [searchParams] = useSearchParams();
@@ -124,6 +125,12 @@ export default function AuthPage() {
 
         const result = await createUserWithEmailAndPassword(auth, trimmedEmail, password);
         user = result.user;
+        try {
+          await sendEmailVerification(user);
+          console.log("Verification email sent successfully.");
+        } catch (verifErr) {
+          console.warn("Could not send verification email immediately:", verifErr);
+        }
       }
 
       if (user) {

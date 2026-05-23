@@ -311,6 +311,77 @@ export default function Home() {
         )}
       </section>
 
+      {/* Complete Predefined Services Directory / Catalog */}
+      <section className="max-w-7xl mx-auto w-full px-4 scroll-mt-24">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-10 pb-4 border-b border-slate-100">
+          <div>
+            <span className="text-indigo-650 text-xs font-black uppercase tracking-widest flex items-center gap-1.5 mb-1">
+              <Sparkles size={14} className="text-amber-500 animate-pulse" /> Complete Services Catalog
+            </span>
+            <h2 className="text-3xl font-extrabold text-slate-900 leading-tight">
+              Predefined Services Registry
+            </h2>
+            <p className="text-sm text-slate-500 font-medium mt-1">
+              Browse standard pricing templates. Type or search a service to match instantly with verified service crews.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {SERVICE_CATEGORIES.filter(cat => selectedHomeCat === 'All' || cat.name === selectedHomeCat).map((category) => (
+            <div key={category.name} className="bg-slate-50/70 rounded-[2.5rem] p-8 border border-slate-200/50 flex flex-col justify-between shadow-sm">
+              <div>
+                <div className="flex items-center gap-3 border-b border-indigo-150/10 pb-4 mb-6">
+                  <span className="text-4xl bg-white w-12 h-12 flex items-center justify-center rounded-xl shadow-sm border border-slate-100">{category.icon}</span>
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900 leading-tight">{category.name}</h3>
+                    <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mt-0.5">Catalog Services</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {category.services.slice(0, 6).map((svc, idx) => (
+                    <div 
+                      key={idx}
+                      className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs flex items-center justify-between hover:border-indigo-200 hover:shadow-md transition-all group"
+                    >
+                      <div className="min-w-0 pr-2 font-sans">
+                        <p className="font-extrabold text-xs text-slate-800 truncate leading-tight mb-1 group-hover:text-indigo-600 transition-colors">
+                          {svc.name}
+                        </p>
+                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest flex items-center gap-1">
+                          <Clock size={10} /> Lock Pricing
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="font-mono text-xs font-black text-slate-900 leading-tight mb-1.5">
+                          {svc.custom ? 'Quote required' : `R${svc.price}`}
+                        </p>
+                        <Link 
+                          to={`/browse?search=${encodeURIComponent(svc.name)}`}
+                          className="inline-flex items-center gap-0.5 text-[9px] font-black text-indigo-600 uppercase tracking-widest hover:text-indigo-800"
+                        >
+                          Find Pros <ArrowRight size={8} strokeWidth={3} />
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-8 pt-6 border-t border-indigo-100/20">
+                <Link
+                  to={`/browse?search=${encodeURIComponent(category.name)}`}
+                  className="w-full py-4 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-1.5 rounded-2xl shadow-sm transition-all"
+                >
+                  Browse all {category.name} pros
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* Why Us Section */}
       <section className="bg-gray-50 py-24 border-y border-gray-100">
         <div className="max-w-7xl mx-auto px-4">
