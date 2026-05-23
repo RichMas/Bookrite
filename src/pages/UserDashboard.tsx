@@ -671,6 +671,11 @@ export default function UserDashboard() {
                       setUpdating(true);
                       try {
                         await setDoc(doc(db, 'providers', user!.uid), {
+                          uid: user.uid,
+                          name: providerProfile.name || profile?.displayName || 'New Provider',
+                          category: providerProfile.category || 'Tutors',
+                          categories: providerProfile.categories || ['Tutors'],
+                          location: providerProfile.location || '',
                           services: providerProfile.services || []
                         }, { merge: true });
                         showToast('Selected services have been saved successfully!');
@@ -820,9 +825,14 @@ export default function UserDashboard() {
                     onClick={async () => {
                       setUpdating(true);
                       try {
-                        await updateDoc(doc(db, 'providers', user!.uid), {
+                        await setDoc(doc(db, 'providers', user!.uid), {
+                          uid: user.uid,
+                          name: providerProfile.name || profile?.displayName || 'New Provider',
+                          category: providerProfile.category || 'Tutors',
+                          categories: providerProfile.categories || ['Tutors'],
+                          location: providerProfile.location || '',
                           availability: providerProfile.availability
-                        });
+                        }, { merge: true });
                         showToast('Availability schedule saved successfully!');
                       } catch (e) {
                         handleFirestoreError(e, OperationType.UPDATE, 'providers');

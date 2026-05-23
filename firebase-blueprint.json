@@ -28,6 +28,7 @@
         "rating": { "type": "number" },
         "reviewCount": { "type": "number" },
         "isApproved": { "type": "boolean" },
+        "isFeatured": { "type": "boolean" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "name", "category", "location"]
@@ -89,6 +90,35 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["senderId", "text"]
+    },
+    "Category": {
+      "title": "Service Category",
+      "description": "Predefined target taxonomy for user-facing jobs.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "icon": { "type": "string" },
+        "services": {
+          "type": "array",
+          "items": { "type": "object" }
+        }
+      },
+      "required": ["name"]
+    },
+    "CustomerReview": {
+      "title": "Customer Review",
+      "description": "Feedback submitted on customers.",
+      "type": "object",
+      "properties": {
+        "bookingId": { "type": "string" },
+        "providerId": { "type": "string" },
+        "providerName": { "type": "string" },
+        "customerId": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["bookingId", "providerId", "customerId", "rating", "comment"]
     }
   },
   "firestore": {
@@ -115,6 +145,14 @@
     "chats/{chatId}/messages/{messageId}": {
       "schema": "Message",
       "description": "Messages in a thread."
+    },
+    "categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Configurable system taxonomies."
+    },
+    "customer_reviews/{customerReviewId}": {
+      "schema": "CustomerReview",
+      "description": "Provider-submitted evaluations on customers."
     }
   }
 }

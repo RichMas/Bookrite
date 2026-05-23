@@ -93,6 +93,18 @@ service cloud.firestore {
              data.keys().hasAll(['senderId', 'text', 'createdAt']);
     }
 
+    function isValidCategory(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.keys().hasAll(['name']);
+    }
+
+    function isValidCustomerReview(data) {
+      return data.providerId == request.auth.uid &&
+             data.rating is number && data.rating >= 1 && data.rating <= 5 &&
+             data.comment is string && data.comment.size() >= 5 && data.comment.size() <= 1000 &&
+             data.keys().hasAll(['bookingId', 'providerId', 'providerName', 'customerId', 'rating', 'comment', 'createdAt']);
+    }
+
     // --- Collections ---
 
     match /users/{userId} {
@@ -107,8 +119,8 @@ service cloud.firestore {
     }
 
     match /providers/{providerId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn();
+      allow get: if true;
+      allow list: if true;
       allow create: if isOwner(providerId) && isValidProvider(incoming());
       allow update: if (isOwner(providerId) || isAdmin()) && (
         // Providers can't self-verify or change approval status
@@ -134,7 +146,7 @@ service cloud.firestore {
     }
 
     match /reviews/{reviewId} {
-      allow read: if isSignedIn();
+      allow read: if true;
       allow create: if isSignedIn() && isValidReview(incoming()) && 
                     get(/databases/$(database)/documents/bookings/$(incoming().bookingId)).data.status == 'completed' &&
                     get(/databases/$(database)/documents/bookings/$(incoming().bookingId)).data.customerId == request.auth.uid;
@@ -153,6 +165,19 @@ service cloud.firestore {
         allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
         allow create: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members && isValidMessage(incoming());
       }
+    }
+
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidCategory(incoming());
+      allow update, delete: if isAdmin();
+    }
+
+    match /customer_reviews/{customerReviewId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidCustomerReview(incoming());
+      allow update: if false;
+      allow delete: if isAdmin();
     }
 
     // System collections
