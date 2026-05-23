@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../App';
 import { deleteUser } from 'firebase/auth';
 import { db, handleFirestoreError, OperationType, auth } from '../firebase';
@@ -46,7 +47,8 @@ const ADMIN_EMAILS = ['paragonbusinessconsult@gmail.com', 'sithembiledlaza8@gmai
 
 export default function UserDashboard() {
   const { user, profile, refreshProfile } = useAuth();
-  const [activeTab, setActiveTab] = useState<'bookings' | 'profile' | 'provider-settings' | 'availability' | 'services' | 'verification' | 'chats' | 'become-provider' | 'my-customers'>('bookings');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<'bookings' | 'profile' | 'provider-settings' | 'availability' | 'services' | 'verification' | 'chats' | 'become-provider' | 'my-customers'>((searchParams.get('tab') as any) || 'bookings');
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
   const [selectedChatUser, setSelectedChatUser] = useState<{ id: string, name: string } | null>(null);
@@ -192,6 +194,18 @@ export default function UserDashboard() {
 
     return () => unsubscribe();
   }, [user]);
+
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam) {
+      setActiveTab(tabParam as any);
+    }
+    const partnerId = searchParams.get('partnerId');
+    const partnerName = searchParams.get('partnerName');
+    if (partnerId && partnerName) {
+      setSelectedChatUser({ id: partnerId, name: partnerName });
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const fetchData = async () => {

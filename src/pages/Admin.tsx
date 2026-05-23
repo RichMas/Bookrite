@@ -5,6 +5,9 @@ import { UserProfile, ProviderProfile, Booking } from '../types';
 import { Users, Briefcase, Calendar, Trash2, CheckCircle, ShieldAlert, Star, Search, Lock, X, Tag, MessageSquare, Plus, Award, ShieldCheck, Settings } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SERVICE_CATEGORIES } from '../constants';
+import { initializeApp, deleteApp } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
+import firebaseConfig from '../../firebase-applet-config.json';
 
 const ADMIN_EMAILS = ['paragonbusinessconsult@gmail.com', 'sithembiledlaza8@gmail.com'];
 
@@ -46,6 +49,16 @@ export default function AdminPanel() {
   // System Settings State
   const [emailVerificationEnabled, setEmailVerificationEnabled] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
+
+  // Add User State
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [newUserDisplayName, setNewUserDisplayName] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserRole, setNewUserRole] = useState<'customer' | 'provider' | 'admin'>('customer');
+  const [creatingUser, setCreatingUser] = useState(false);
+  const [newUserError, setNewUserError] = useState<string | null>(null);
+  const [newUserSuccess, setNewUserSuccess] = useState<string | null>(null);
 
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -299,6 +312,93 @@ export default function AdminPanel() {
     }
   };
 
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUserDisplayName.trim() || !newUserEmail.trim() || !newUserPassword.trim() || !newUserRole) {
+      setNewUserError('All fields are required.');
+      return;
+    }
+    setCreatingUser(true);
+    setNewUserError(null);
+    setNewUserSuccess(null);
+    
+    try {
+      const tempAppName = 'temp_admin_user_creator_' + Date.now();
+      const tempApp = initializeApp(firebaseConfig, tempAppName);
+      const tempAuth = getAuth(tempApp);
+      
+      // Create actual Auth User
+      const userCredential = await createUserWithEmailAndPassword(tempAuth, newUserEmail, newUserPassword);
+      const newUser = userCredential.user;
+      
+      // Write profile to Firestore
+      await setDoc(doc(db, 'users', newUser.uid), {
+        uid: newUser.uid,
+        email: newUserEmail.toLowerCase().trim(),
+        displayName: newUserDisplayName,
+        role: newUserRole,
+        createdAt: new Date(),
+      });
+
+      // If role is provider, initialize a default provider listing
+      if (newUserRole === 'provider') {
+        await setDoc(doc(db, 'providers', newUser.uid), {
+          uid: newUser.uid,
+          name: newUserDisplayName,
+          email: newUserEmail.toLowerCase().trim(),
+          category: 'Handyman', // Default category
+          description: 'A default service listing created by administrator. Ready for updates!',
+          location: 'South Africa',
+          rating: 5,
+          reviewCount: 0,
+          isApproved: true, // Auto-approve admin created provider listings for premium flow
+          isVerified: 'verified', // Auto-verify admin created provider listings
+          services: [],
+          availability: {
+            monday: { enabled: true, slots: ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'] },
+            tuesday: { enabled: true, slots: ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'] },
+            wednesday: { enabled: true, slots: ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'] },
+            thursday: { enabled: true, slots: ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'] },
+            friday: { enabled: true, slots: ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'] }
+          },
+          createdAt: new Date(),
+        });
+      }
+
+      // Cleanup
+      await signOut(tempAuth);
+      await deleteApp(tempApp);
+      
+      setNewUserSuccess(`Account registered successfully for ${newUserDisplayName} (${newUserRole})`);
+      setNewUserDisplayName('');
+      setNewUserEmail('');
+      setNewUserPassword('');
+      setNewUserRole('customer');
+      
+      // Refresh list
+      await fetchData();
+      
+      setTimeout(() => {
+        setShowAddUserModal(false);
+        setNewUserSuccess(null);
+      }, 1500);
+
+    } catch (err: any) {
+      console.error('Error creating user profile:', err);
+      let errorMsg = err?.message || 'Failed to create user account. Please check inputs.';
+      if (err?.code === 'auth/weak-password') {
+        errorMsg = 'Strength Check: Password must be at least 6 characters.';
+      } else if (err?.code === 'auth/email-already-in-use') {
+        errorMsg = 'Error: This email address is already in use by another user.';
+      } else if (err?.code === 'auth/invalid-email') {
+        errorMsg = 'Error: The email address is formatted incorrectly.';
+      }
+      setNewUserError(errorMsg);
+    } finally {
+      setCreatingUser(false);
+    }
+  };
+
   const handleSeedCategories = async () => {
     if (!window.confirm('Would you like to seed the initial standard categories into the Firestore database? This makes it easy to manage templates dynamically.')) return;
     setLoading(true);
@@ -403,8 +503,31 @@ export default function AdminPanel() {
           </div>
         ) : (
           ['users', 'providers', 'bookings', 'verifications', 'finances'].includes(activeTab) ? (
-            <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <div>
+              {activeTab === 'users' && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-8 py-6 border-b border-gray-100 bg-gray-50/50">
+                  <div>
+                    <h2 className="text-xl font-black text-slate-800">User Directory</h2>
+                    <p className="text-xs text-slate-500 font-bold mt-0.5">Total registered system user profiles: {users.length}</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setNewUserError(null);
+                      setNewUserSuccess(null);
+                      setNewUserDisplayName('');
+                      setNewUserEmail('');
+                      setNewUserPassword('');
+                      setNewUserRole('customer');
+                      setShowAddUserModal(true);
+                    }}
+                    className="flex items-center gap-2 px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-xl shadow-indigo-100 shrink-0 border-none outline-none cursor-pointer"
+                  >
+                    <Plus size={16} /> Create User Account
+                  </button>
+                </div>
+              )}
+              <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
                   {activeTab === 'users' && (
@@ -619,6 +742,7 @@ export default function AdminPanel() {
                 ))}
               </tbody>
             </table>
+          </div>
           </div>
           ) : activeTab === 'categories' ? (
             <div className="p-8 font-sans">
@@ -1120,6 +1244,123 @@ export default function AdminPanel() {
                   )}
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Create New User Modal */}
+      <AnimatePresence>
+        {showAddUserModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-md bg-slate-900/60 font-sans">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white p-8 rounded-[2.5rem] w-full max-w-lg shadow-2xl relative border border-slate-100"
+            >
+              <button 
+                onClick={() => setShowAddUserModal(false)}
+                className="absolute top-6 right-6 p-2 hover:bg-slate-50 text-slate-400 hover:text-slate-600 rounded-full transition-all border-none bg-transparent cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+
+              <div className="mb-6">
+                <h3 className="text-2xl font-black text-slate-900 flex items-center gap-2">
+                  <Users size={24} className="text-indigo-600" />
+                  Create User Account
+                </h3>
+                <p className="text-slate-400 text-xs font-bold mt-1">Register a new profile directly in the database & Auth service.</p>
+              </div>
+
+              {newUserError && (
+                <div className="mb-4 p-4 bg-rose-50 border border-rose-100 text-rose-600 rounded-2xl text-xs font-bold animate-pulse">
+                  {newUserError}
+                </div>
+              )}
+
+              {newUserSuccess && (
+                <div className="mb-4 p-4 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-2xl text-xs font-bold animate-pulse">
+                  {newUserSuccess}
+                </div>
+              )}
+
+              <form onSubmit={handleCreateUser} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Full Name / Display Name</label>
+                  <input 
+                    type="text"
+                    required
+                    value={newUserDisplayName}
+                    onChange={(e) => setNewUserDisplayName(e.target.value)}
+                    className="w-full px-5 py-3.5 bg-slate-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl outline-none transition-all font-semibold text-sm"
+                    placeholder="e.g. Sipho Ndlovu"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Email Address</label>
+                  <input 
+                    type="email"
+                    required
+                    value={newUserEmail}
+                    onChange={(e) => setNewUserEmail(e.target.value)}
+                    className="w-full px-5 py-3.5 bg-slate-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl outline-none transition-all font-semibold text-sm"
+                    placeholder="e.g. sipho@gmail.com"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Initial Password</label>
+                  <input 
+                    type="password"
+                    required
+                    minLength={6}
+                    value={newUserPassword}
+                    onChange={(e) => setNewUserPassword(e.target.value)}
+                    className="w-full px-5 py-3.5 bg-slate-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl outline-none transition-all font-semibold text-sm"
+                    placeholder="Min 6 characters"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Account Role</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {['customer', 'provider', 'admin'].map((roleOpt) => (
+                      <button
+                        key={roleOpt}
+                        type="button"
+                        onClick={() => setNewUserRole(roleOpt as any)}
+                        className={`py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all border select-none cursor-pointer ${
+                          newUserRole === roleOpt
+                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        {roleOpt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button 
+                  type="submit"
+                  disabled={creatingUser}
+                  className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all shadow-xl shadow-slate-100 disabled:opacity-50 mt-6 cursor-pointer"
+                >
+                  {creatingUser ? (
+                    <>
+                      <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin flex-shrink-0"></span>
+                      Creating User...
+                    </>
+                  ) : (
+                    <>
+                      <Plus size={16} /> Create User Account
+                    </>
+                  )}
+                </button>
+              </form>
             </motion.div>
           </div>
         )}
