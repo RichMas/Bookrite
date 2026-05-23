@@ -207,7 +207,7 @@ export default function UserDashboard() {
     setUpdating(true);
     try {
       // Main category for backwards compatibility
-      const mainCategory = pCategories[0] || pCategory || 'Tutor';
+      const mainCategory = pCategories[0] || pCategory || 'Tutors';
       
       const updatedFields = {
         uid: user.uid,
@@ -1221,7 +1221,8 @@ export default function UserDashboard() {
                         await setDoc(doc(db, 'providers', user.uid), {
                           uid: user.uid,
                           name: profile.displayName || 'New Provider',
-                          category: 'Tutor',
+                          category: 'Tutors',
+                          categories: ['Tutors'],
                           description: '',
                           location: '',
                           photoURL: profile.photoURL || '',

@@ -24,12 +24,13 @@ export default function Browse() {
   const { profile } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialCategory = searchParams.get('category') || 'All';
+  const initialSearch = searchParams.get('search') || '';
 
   // Filters state
   const [selectedLocation, setSelectedLocation] = useState('All');
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
   const [selectedSpecificService, setSelectedSpecificService] = useState('All');
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(initialSearch);
   
   const [providers, setProviders] = useState<ProviderProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,17 +52,21 @@ export default function Browse() {
     fetchProviders();
   }, []);
 
-  // Sync category state with search parameters if changed from exterior link
+  // Sync category & search state with search parameters if changed from exterior link
   useEffect(() => {
     const catParam = searchParams.get('category');
     if (catParam) {
       setSelectedCategory(catParam);
     }
+    const searchParam = searchParams.get('search');
+    if (searchParam) {
+      setSearch(searchParam);
+    }
   }, [searchParams]);
 
-  // Derive flat individual services from APPROVED & VERIFIED providers only
+  // Derive flat individual services from all providers who have listed services
   const allServices = providers
-    .filter(p => p.isVerified === 'verified' && p.services && p.services.length > 0)
+    .filter(p => p.services && p.services.length > 0)
     .flatMap(p => p.services.map(s => ({
       ...s,
       providerId: p.uid,
@@ -72,13 +77,14 @@ export default function Browse() {
       providerReviewCount: p.reviewCount || 0,
       providerPhoto: p.photoURL,
       providerCategory: p.category,
-      providerCategories: p.categories || [p.category]
+      providerCategories: p.categories || [p.category],
+      isVerified: p.isVerified === 'verified'
     })));
 
   // Extract dynamic location choices based on all active providers
   const locations = ['All', ...Array.from(new Set(
     providers
-      .filter(p => p.isVerified === 'verified')
+      .filter(p => p.services && p.services.length > 0)
       .map(p => p.city || p.location.split(',')[0].trim())
       .filter(Boolean)
   ))];
@@ -136,7 +142,7 @@ export default function Browse() {
 
   // 3. Highly Rated Service Providers (unique providers filtering)
   const highlyRatedProviders = providers
-    .filter(p => p.isVerified === 'verified' && p.rating >= 4.7)
+    .filter(p => p.services && p.services.length > 0 && p.rating >= 4.5)
     .slice(0, 3);
 
   const getCategoryIcon = (catName: string): string => {

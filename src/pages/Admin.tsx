@@ -1,17 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { db, handleFirestoreError, OperationType, auth, updatePassword } from '../firebase';
-import { collection, getDocs, deleteDoc, doc, updateDoc, query, limit } from 'firebase/firestore';
+import { collection, getDocs, deleteDoc, doc, updateDoc, query, limit, addDoc } from 'firebase/firestore';
 import { UserProfile, ProviderProfile, Booking } from '../types';
-import { Users, Briefcase, Calendar, Trash2, CheckCircle, ShieldAlert, Star, Search, Lock, X } from 'lucide-react';
+import { Users, Briefcase, Calendar, Trash2, CheckCircle, ShieldAlert, Star, Search, Lock, X, Tag, MessageSquare, Plus, Award, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { SERVICE_CATEGORIES } from '../constants';
 
 export default function AdminPanel() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [providers, setProviders] = useState<ProviderProfile[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'users' | 'providers' | 'bookings' | 'verifications' | 'finances'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'providers' | 'bookings' | 'verifications' | 'finances' | 'categories' | 'reviews'>('users');
   const [search, setSearch] = useState('');
+
+  // Reviews dynamic state
+  const [reviews, setReviews] = useState<any[]>([]);
+  // Dynamic Categories and Services Management State
+  const [dbCategories, setDbCategories] = useState<any[]>([]);
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatIcon, setNewCatIcon] = useState('💼');
+  const [newServiceName, setNewServiceName] = useState('');
+  const [newServicePrice, setNewServicePrice] = useState('');
+  const [selectedCatForService, setSelectedCatForService] = useState('');
+  const [submittingCat, setSubmittingCat] = useState(false);
+  const [submittingService, setSubmittingService] = useState(false);
 
   // Password reset/management state
   const [showPwdModal, setShowPwdModal] = useState(false);
@@ -94,15 +107,19 @@ export default function AdminPanel() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [uSnap, pSnap, bSnap] = await Promise.all([
+      const [uSnap, pSnap, bSnap, rSnap, cSnap] = await Promise.all([
         getDocs(query(collection(db, 'users'), limit(50))),
         getDocs(query(collection(db, 'providers'), limit(50))),
-        getDocs(query(collection(db, 'bookings'), limit(50)))
+        getDocs(query(collection(db, 'bookings'), limit(50))),
+        getDocs(query(collection(db, 'reviews'), limit(100))),
+        getDocs(query(collection(db, 'categories'), limit(100)))
       ]);
       
       setUsers(uSnap.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile)));
       setProviders(pSnap.docs.map(d => ({ uid: d.id, ...d.data() } as ProviderProfile)));
       setBookings(bSnap.docs.map(d => ({ id: d.id, ...d.data() } as Booking)));
+      setReviews(rSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
+      setDbCategories(cSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
     } catch (error) {
       console.error(error);
     } finally {
@@ -153,6 +170,104 @@ export default function AdminPanel() {
     }
   };
 
+  const handleAddCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCatName.trim()) return;
+    setSubmittingCat(true);
+    try {
+      await addDoc(collection(db, 'categories'), {
+        name: newCatName.trim(),
+        icon: newCatIcon,
+        services: []
+      });
+      setNewCatName('');
+      await fetchData();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setSubmittingCat(false);
+    }
+  };
+
+  const handleAddServiceTemplate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newServiceName.trim() || !selectedCatForService) return;
+    setSubmittingService(true);
+    try {
+      const selectedCatDoc = dbCategories.find(c => c.name === selectedCatForService || c.id === selectedCatForService);
+      if (selectedCatDoc) {
+        const updatedServices = [
+          ...(selectedCatDoc.services || []),
+          { 
+            name: newServiceName.trim(), 
+            price: Number(newServicePrice) || 0,
+            duration: '60 min'
+          }
+        ];
+        await updateDoc(doc(db, 'categories', selectedCatDoc.id), {
+          services: updatedServices
+        });
+        setNewServiceName('');
+        setNewServicePrice('');
+        await fetchData();
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setSubmittingService(false);
+    }
+  };
+
+  const handleDeleteCategory = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this category?')) return;
+    try {
+      await deleteDoc(doc(db, 'categories', id));
+      await fetchData();
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleToggleFeatureProvider = async (providerId: string, currentVal: boolean) => {
+    try {
+      await updateDoc(doc(db, 'providers', providerId), {
+        isFeatured: !currentVal
+      });
+      await fetchData();
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleDeleteReview = async (reviewId: string) => {
+    if (!window.confirm('Are you sure you want to permanently delete this review? This is useful for moderating fake reviews and settling disputes.')) return;
+    try {
+      await deleteDoc(doc(db, 'reviews', reviewId));
+      await fetchData();
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleSeedCategories = async () => {
+    if (!window.confirm('Would you like to seed the initial standard categories into the Firestore database? This makes it easy to manage templates dynamically.')) return;
+    setLoading(true);
+    try {
+      for (const cat of SERVICE_CATEGORIES) {
+        await addDoc(collection(db, 'categories'), {
+          name: cat.name,
+          icon: cat.icon,
+          services: cat.services
+        });
+      }
+      await fetchData();
+    } catch (err) {
+      console.error("Error seeding categories:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-12">
@@ -173,36 +288,53 @@ export default function AdminPanel() {
           </button>
         </div>
 
-        <div className="flex bg-gray-100 p-1.5 rounded-2xl">
+        <div className="flex flex-wrap bg-gray-100 p-1.5 rounded-2xl gap-1">
           <button 
             onClick={() => setActiveTab('users')}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all ${activeTab === 'users' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500'}`}
+            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all ${activeTab === 'users' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
           >
             <Users size={18} /> Users
           </button>
           <button 
             onClick={() => setActiveTab('providers')}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all ${activeTab === 'providers' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500'}`}
+            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all ${activeTab === 'providers' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
           >
             <Briefcase size={18} /> Providers
           </button>
           <button 
             onClick={() => setActiveTab('bookings')}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all ${activeTab === 'bookings' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500'}`}
+            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all ${activeTab === 'bookings' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
           >
             <Calendar size={18} /> Bookings
           </button>
           <button 
             onClick={() => setActiveTab('verifications')}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all ${activeTab === 'verifications' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500'}`}
+            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all ${activeTab === 'verifications' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
           >
             <ShieldAlert size={18} /> Verifications
           </button>
           <button 
             onClick={() => setActiveTab('finances')}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all ${activeTab === 'finances' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500'}`}
+            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all ${activeTab === 'finances' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
           >
             <Star size={18} /> Finances
+          </button>
+          <button 
+            onClick={() => {
+              setActiveTab('categories');
+              if (dbCategories.length > 0 && !selectedCatForService) {
+                setSelectedCatForService(dbCategories[0].name || dbCategories[0].id);
+              }
+            }}
+            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all ${activeTab === 'categories' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+          >
+            <Tag size={18} /> Categories & Services
+          </button>
+          <button 
+            onClick={() => setActiveTab('reviews')}
+            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all ${activeTab === 'reviews' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+          >
+            <MessageSquare size={18} /> Reviews Moderation
           </button>
         </div>
       </div>
@@ -214,7 +346,8 @@ export default function AdminPanel() {
             <p className="mt-4 text-gray-500 font-medium">Crunching data...</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          ['users', 'providers', 'bookings', 'verifications', 'finances'].includes(activeTab) ? (
+            <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
@@ -431,6 +564,263 @@ export default function AdminPanel() {
               </tbody>
             </table>
           </div>
+          ) : activeTab === 'categories' ? (
+            <div className="p-8 font-sans">
+              <div className="flex flex-col lg:flex-row justify-between items-start gap-8 mb-8 border-b border-gray-100 pb-6">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">Category & Service Template Management</h3>
+                  <p className="text-sm text-gray-500 mt-1">Configure predefined service categories, templates, and highlight custom providers.</p>
+                </div>
+                {dbCategories.length === 0 && (
+                  <button
+                    onClick={handleSeedCategories}
+                    className="px-6 py-3 bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-xl hover:bg-indigo-700 transition"
+                  >
+                    Seed Standard Categories
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* Left Side: Categories management (Span 4) */}
+                <div className="lg:col-span-4 space-y-6">
+                  <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+                    <h4 className="text-sm font-black uppercase text-slate-700 tracking-wider mb-4">Add Custom Category</h4>
+                    <form onSubmit={handleAddCategory} className="space-y-4">
+                      <div>
+                        <label className="text-[10px] uppercase font-black tracking-widest text-slate-400 block mb-1">Category Name</label>
+                        <input
+                          type="text"
+                          required
+                          value={newCatName}
+                          onChange={(e) => setNewCatName(e.target.value)}
+                          placeholder="e.g. Roof Painters"
+                          className="w-full px-4 py-2.5 bg-white border border-slate-150 focus:border-indigo-500 rounded-xl outline-none font-bold text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] uppercase font-black tracking-widest text-slate-400 block mb-1">Emoji Icon</label>
+                        <select
+                          value={newCatIcon}
+                          onChange={(e) => setNewCatIcon(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-white border border-slate-150 focus:border-indigo-500 rounded-xl outline-none font-bold text-sm"
+                        >
+                          <option value="💼">💼 Handyman</option>
+                          <option value="🚰">🚰 Plumbing</option>
+                          <option value="⚡">⚡ Electrical</option>
+                          <option value="🧼">🧼 Cleaning</option>
+                          <option value="🚗">🚗 Mechanical</option>
+                          <option value="📚">📚 Tutoring</option>
+                          <option value="💇">💇 Salon & Hair</option>
+                          <option value="📸">📸 Photography</option>
+                          <option value="🏠">🏠 Rentals</option>
+                        </select>
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={submittingCat}
+                        className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase tracking-widest rounded-xl transition disabled:opacity-50"
+                      >
+                        {submittingCat ? 'Adding...' : 'Add Category'}
+                      </button>
+                    </form>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider">Active Categories ({dbCategories.length})</h4>
+                    {dbCategories.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic">No custom categories added. Consider bulk-seeding them!</p>
+                    ) : (
+                      <div className="max-h-[300px] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                        {dbCategories.map((cat) => (
+                          <div key={cat.id} className="flex items-center justify-between p-3.5 bg-white border border-gray-100 rounded-2xl">
+                            <div className="flex items-center gap-2.5">
+                              <span className="text-xl">{cat.icon || '💼'}</span>
+                              <span className="text-sm font-bold text-gray-800">{cat.name}</span>
+                            </div>
+                            <button
+                              onClick={() => handleDeleteCategory(cat.id)}
+                              className="text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Middle Side: Template Services list (Span 4) */}
+                <div className="lg:col-span-4 space-y-6 border-t lg:border-t-0 lg:border-l lg:border-r border-gray-150 lg:px-6">
+                  <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+                    <h4 className="text-sm font-black uppercase text-slate-700 tracking-wider mb-4">Add Service Template</h4>
+                    <form onSubmit={handleAddServiceTemplate} className="space-y-4">
+                      <div>
+                        <label className="text-[10px] uppercase font-black tracking-widest text-slate-400 block mb-1">Target Category</label>
+                        <select
+                          value={selectedCatForService}
+                          onChange={(e) => setSelectedCatForService(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-white border border-slate-150 focus:border-indigo-500 rounded-xl outline-none font-bold text-sm"
+                        >
+                          <option value="">Select Category</option>
+                          {dbCategories.map((c) => (
+                            <option key={c.id} value={c.name}>{c.name}</option>
+                          ))}
+                          {dbCategories.length === 0 && (
+                            <option value="">(Seed categories first)</option>
+                          )}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] uppercase font-black tracking-widest text-slate-400 block mb-1">Service Template Name</label>
+                        <input
+                          type="text"
+                          required
+                          value={newServiceName}
+                          onChange={(e) => setNewServiceName(e.target.value)}
+                          placeholder="e.g. Standard Geyser Repair"
+                          className="w-full px-4 py-2.5 bg-white border border-slate-150 focus:border-indigo-500 rounded-xl outline-none font-bold text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] uppercase font-black tracking-widest text-slate-400 block mb-1">Estimate Base Price (R)</label>
+                        <input
+                          type="number"
+                          required
+                          value={newServicePrice}
+                          onChange={(e) => setNewServicePrice(e.target.value)}
+                          placeholder="e.g. 500"
+                          className="w-full px-4 py-2.5 bg-white border border-slate-150 focus:border-indigo-500 rounded-xl outline-none font-bold text-sm"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={submittingService || !selectedCatForService}
+                        className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-black uppercase tracking-widest rounded-xl transition disabled:opacity-50"
+                      >
+                        {submittingService ? 'Saving...' : 'Add Template Service'}
+                      </button>
+                    </form>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider">Template Previews</h4>
+                    <div className="max-h-[250px] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                      {dbCategories.map((cat) => (
+                        <div key={cat.id} className="p-3 bg-gray-50/50 rounded-2xl border border-gray-100">
+                          <p className="text-xs font-black text-indigo-600 mb-1.5 uppercase tracking-wider">{cat.icon} {cat.name}</p>
+                          {(cat.services || []).length === 0 ? (
+                            <p className="text-[11px] text-gray-400 italic">No service templates defined yet.</p>
+                          ) : (
+                            <div className="space-y-1">
+                              {cat.services.map((ser: any, sIdx: number) => (
+                                <div key={sIdx} className="flex justify-between items-center text-xs text-gray-600 bg-white p-1.5 rounded-lg border border-gray-50">
+                                  <span>{ser.name}</span>
+                                  <span className="font-bold text-gray-900">R{ser.price}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Side: Feature Provider */}
+                <div className="lg:col-span-4 space-y-4">
+                  <div className="p-3 bg-amber-50 border border-amber-100 rounded-2xl mb-4 text-amber-800 text-xs font-medium leading-relaxed">
+                    🌟 <strong>Featured Providers Control:</strong> Use this panel to feature trusted professionals directly onto client portals for premium performance highlight!
+                  </div>
+                  
+                  <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider mb-2">Available Professionals ({providers.length})</h4>
+                  <div className="max-h-[500px] overflow-y-auto space-y-3 pr-1 custom-scrollbar">
+                    {providers.map((prov) => {
+                      const isFeatured = prov.isFeatured || false;
+                      return (
+                        <div key={prov.uid} className="flex items-center justify-between p-4 bg-white border border-gray-100 rounded-2xl hover:border-indigo-100 transition shadow-sm">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={prov.photoURL || `https://picsum.photos/seed/${prov.uid}/80/80`}
+                              alt=""
+                              className="w-10 h-10 rounded-xl object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                            <div className="text-left">
+                              <p className="text-xs font-black text-slate-800 leading-tight">{prov.name}</p>
+                              <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider mt-0.5">{prov.category}</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleToggleFeatureProvider(prov.uid, isFeatured)}
+                            className={`p-2.5 rounded-xl border flex items-center justify-center transition-all ${
+                              isFeatured 
+                                ? 'bg-amber-100 border-amber-300 text-amber-600 scale-105 shadow-md shadow-amber-50' 
+                                : 'bg-slate-50 border-slate-150 text-slate-400 hover:text-amber-500'
+                            }`}
+                            title={isFeatured ? 'Feature Enabled' : 'Click to Feature'}
+                          >
+                            <Award size={16} fill={isFeatured ? 'currentColor' : 'none'} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="p-8 font-sans">
+              <div className="border-b border-gray-100 pb-6 mb-6">
+                <h3 className="text-xl font-bold text-gray-900">System Feedback & Moderation</h3>
+                <p className="text-sm text-gray-500 mt-1">Review feedback, monitor quality standards, flag abuses, and safely remove disputed or fake items.</p>
+              </div>
+
+              {reviews.length === 0 ? (
+                <div className="text-center py-20 bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-150">
+                  <MessageSquare className="text-slate-300 mx-auto mb-4" size={40} />
+                  <p className="text-slate-500 font-bold">No Feedback Documents Found</p>
+                  <p className="text-slate-400 text-xs mt-1">Clients & registered providers will trigger feedback reports after completing jobs.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {reviews.map((rev) => (
+                    <div key={rev.id} className="bg-white rounded-[2rem] p-6 border border-slate-100 hover:border-indigo-150 transition shadow-lg flex flex-col justify-between">
+                      <div>
+                        <div className="flex justify-between items-start gap-4 mb-4">
+                          <div>
+                            <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Client Feedback</span>
+                            <h4 className="font-extrabold text-slate-900 text-base leading-tight mt-0.5">{rev.customerName || 'Anonymous Client'}</h4>
+                          </div>
+                          <div className="flex items-center gap-1 bg-amber-50 text-amber-700 py-1 px-2.5 rounded-lg border border-amber-100/50">
+                            <Star size={12} fill="currentColor" className="text-amber-500" />
+                            <span className="text-xs font-black">{rev.rating}</span>
+                          </div>
+                        </div>
+
+                        <p className="text-sm text-slate-600 font-sans italic my-4 leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-100 font-normal">
+                          "{rev.comment || 'No comment provided.'}"
+                        </p>
+                      </div>
+
+                      <div className="pt-4 border-t border-slate-100/50 flex justify-between items-center mt-4">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                          Provider ID: <span className="font-mono text-xs">{rev.providerId?.slice(0, 8)}...</span>
+                        </span>
+                        <button
+                          onClick={() => handleDeleteReview(rev.id)}
+                          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-650 hover:text-red-700 text-xs font-black uppercase tracking-wider rounded-xl transition"
+                        >
+                          <Trash2 size={12} /> Remove Fake Review
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
         )}
       </div>
 
