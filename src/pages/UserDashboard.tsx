@@ -42,6 +42,8 @@ const SLOTS = [
   '18:00', '18:30', '19:00', '19:30', '20:00', '20:30', '21:00'
 ];
 
+const ADMIN_EMAILS = ['paragonbusinessconsult@gmail.com', 'sithembiledlaza8@gmail.com'];
+
 export default function UserDashboard() {
   const { user, profile, refreshProfile } = useAuth();
   const [activeTab, setActiveTab] = useState<'bookings' | 'profile' | 'provider-settings' | 'availability' | 'services' | 'verification' | 'chats' | 'become-provider' | 'my-customers'>('bookings');
@@ -286,6 +288,12 @@ export default function UserDashboard() {
 
   const handleDeleteMyAccount = async () => {
     if (!user) return;
+    
+    if (user.email && ADMIN_EMAILS.includes(user.email.toLowerCase())) {
+      alert("Security Block: Administrators are forbidden from deleting their account to ensure continuous application access and moderation stability.");
+      return;
+    }
+
     const confirmDelete = window.confirm(
       "WARNING: This will permanently delete your profile, listing, and all associated account data on PinYourPro. This action cannot be undone. Are you sure you want to proceed?"
     );

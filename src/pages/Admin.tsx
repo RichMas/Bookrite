@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { db, handleFirestoreError, OperationType, auth, updatePassword } from '../firebase';
-import { collection, getDocs, deleteDoc, doc, updateDoc, query, limit, addDoc } from 'firebase/firestore';
+import { collection, getDocs, deleteDoc, doc, updateDoc, query, limit, addDoc, getDoc, setDoc } from 'firebase/firestore';
 import { UserProfile, ProviderProfile, Booking } from '../types';
-import { Users, Briefcase, Calendar, Trash2, CheckCircle, ShieldAlert, Star, Search, Lock, X, Tag, MessageSquare, Plus, Award, ShieldCheck } from 'lucide-react';
+import { Users, Briefcase, Calendar, Trash2, CheckCircle, ShieldAlert, Star, Search, Lock, X, Tag, MessageSquare, Plus, Award, ShieldCheck, Settings } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SERVICE_CATEGORIES } from '../constants';
+
+const ADMIN_EMAILS = ['paragonbusinessconsult@gmail.com', 'sithembiledlaza8@gmail.com'];
 
 export default function AdminPanel() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [providers, setProviders] = useState<ProviderProfile[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'users' | 'providers' | 'bookings' | 'verifications' | 'finances' | 'categories' | 'reviews'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'providers' | 'bookings' | 'verifications' | 'finances' | 'categories' | 'reviews' | 'settings'>('users');
   const [search, setSearch] = useState('');
 
   // Reviews dynamic state
@@ -40,6 +42,27 @@ export default function AdminPanel() {
   const [verificationFeedback, setVerificationFeedback] = useState('');
   const [vStatus, setVStatus] = useState<'verified' | 'rejected' | 'requirements'>('verified');
   const [vSubmitting, setVSubmitting] = useState(false);
+
+  // System Settings State
+  const [emailVerificationEnabled, setEmailVerificationEnabled] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingSettings(true);
+    try {
+      await setDoc(doc(db, 'settings', 'emailVerification'), {
+        enabled: emailVerificationEnabled,
+        updatedAt: new Date()
+      });
+      alert('System security configurations updated successfully!');
+    } catch (error) {
+      console.error(error);
+      alert('Error updating system configurations. Please try again.');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
 
   const handleOpenVerification = (provider: ProviderProfile) => {
     setSelectedProvider(provider);
@@ -129,9 +152,36 @@ export default function AdminPanel() {
 
   useEffect(() => {
     fetchData();
+    const fetchSettings = async () => {
+      try {
+        const docRef = doc(db, 'settings', 'emailVerification');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          setEmailVerificationEnabled(docSnap.data().enabled ?? false);
+        } else {
+          setEmailVerificationEnabled(false);
+        }
+      } catch (err) {
+        console.error("Error fetching system configurations:", err);
+      }
+    };
+    fetchSettings();
   }, []);
 
   const handleDelete = async (coll: string, id: string) => {
+    if (coll === 'users' || coll === 'providers') {
+      const targetUser = users.find(u => u.uid === id);
+      const targetProvider = providers.find(p => p.uid === id);
+      const targetEmail = targetUser?.email || targetProvider?.email;
+      if (
+        (targetEmail && ADMIN_EMAILS.includes(targetEmail.toLowerCase())) ||
+        (auth.currentUser?.uid === id)
+      ) {
+        alert("Security Block: Administrative accounts cannot be deleted to ensure platform stability and prevent lockout.");
+        return;
+      }
+    }
+
     if (!window.confirm('Are you sure? This action is irreversible. This will remove their profile and database accessibility immediately.')) return;
     try {
       if (coll === 'providers') {
@@ -335,6 +385,12 @@ export default function AdminPanel() {
             className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all ${activeTab === 'reviews' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
           >
             <MessageSquare size={18} /> Reviews Moderation
+          </button>
+          <button 
+            onClick={() => setActiveTab('settings')}
+            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all ${activeTab === 'settings' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+          >
+            <Settings size={18} /> Settings
           </button>
         </div>
       </div>
@@ -770,7 +826,7 @@ export default function AdminPanel() {
                 </div>
               </div>
             </div>
-          ) : (
+          ) : activeTab === 'reviews' ? (
             <div className="p-8 font-sans">
               <div className="border-b border-gray-100 pb-6 mb-6">
                 <h3 className="text-xl font-bold text-gray-900">System Feedback & Moderation</h3>
@@ -819,6 +875,53 @@ export default function AdminPanel() {
                   ))}
                 </div>
               )}
+            </div>
+          ) : (
+            <div className="p-8 font-sans max-w-2xl">
+              <div className="border-b border-gray-100 pb-6 mb-8">
+                <h3 className="text-2xl font-black text-gray-900">System & Security Settings</h3>
+                <p className="text-sm text-gray-500 mt-1">Configure global application variables, security gates, and testing toggles.</p>
+              </div>
+
+              <form onSubmit={handleSaveSettings} className="space-y-8">
+                <div className="bg-slate-50 p-6 md:p-8 rounded-[2rem] border border-slate-100 space-y-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-wider">Email Bot Protection Check</h4>
+                      <p className="text-xs text-slate-500 leading-relaxed font-semibold">
+                        When active, newly registered users must complete an email verification check before exploring categories or registering provider credentials of the platform.
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer select-none">
+                      <input 
+                        type="checkbox" 
+                        checked={emailVerificationEnabled}
+                        onChange={(e) => setEmailVerificationEnabled(e.target.checked)}
+                        className="sr-only peer" 
+                      />
+                      <div className="w-14 h-7.5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5.5 after:w-5.5 after:transition-all peer-checked:bg-indigo-600"></div>
+                    </label>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-xl border border-slate-200/60 text-xs flex gap-2.5 items-start text-indigo-700 leading-relaxed">
+                    <span className="text-xl">💡</span>
+                    <div>
+                      <strong className="block font-black mb-0.5">Testing Mode Recommendation:</strong>
+                      Turn this toggle <strong className="underline">OFF</strong> during development or testing cycles to bypass verification block screens and test signup flows instantly. Enable it in production to screen bots.
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-4 border-t border-slate-105">
+                  <button
+                    type="submit"
+                    disabled={savingSettings}
+                    className="px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-xl shadow-indigo-100 transition disabled:opacity-50"
+                  >
+                    {savingSettings ? 'Saving Configurations...' : 'Save Global Settings'}
+                  </button>
+                </div>
+              </form>
             </div>
           )
         )}

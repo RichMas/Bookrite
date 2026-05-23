@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect, useState, createContext, useContext } from 'react';
 import { onAuthStateChanged, User, sendEmailVerification } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { UserProfile, UserRole } from './types';
 import { ShieldAlert, MailCheck, LogOut, RefreshCw, Sparkles } from 'lucide-react';
@@ -43,6 +43,22 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [verificationFeedback, setVerificationFeedback] = useState<string | null>(null);
   const [sendingVerification, setSendingVerification] = useState(false);
+  const [emailVerificationEnabled, setEmailVerificationEnabled] = useState(false);
+
+  useEffect(() => {
+    const settingsRef = doc(db, 'settings', 'emailVerification');
+    const unsubscribeSettings = onSnapshot(settingsRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setEmailVerificationEnabled(docSnap.data().enabled ?? false);
+      } else {
+        setEmailVerificationEnabled(false);
+      }
+    }, (error) => {
+      console.warn("Error listening to settings, defaulting to false:", error);
+      setEmailVerificationEnabled(false);
+    });
+    return () => unsubscribeSettings();
+  }, []);
 
   const fetchProfile = async (uid: string) => {
     try {
@@ -136,8 +152,8 @@ export default function App() {
     );
   }
 
-  // Email verification gate (bypassed if they have no login or if email is verified)
-  const isEmailVerified = !user || user.emailVerified || (user.email && ADMIN_EMAILS.includes(user.email.toLowerCase()));
+  // Email verification gate (bypassed if they have no login, if email is verified, or if the setting is globally disabled)
+  const isEmailVerified = !user || !emailVerificationEnabled || user.emailVerified || (user.email && ADMIN_EMAILS.includes(user.email.toLowerCase()));
 
   if (!isEmailVerified) {
     return (
