@@ -23,7 +23,10 @@ import {
   AlertCircle,
   CheckCircle2,
   MessageSquare,
-  MessageCircle
+  MessageCircle,
+  Mail,
+  Phone,
+  ArrowLeft
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ChatWindow from '../components/ChatWindow';
@@ -73,6 +76,101 @@ export default function UserDashboard() {
   const [pCategories, setPCategories] = useState<string[]>([]);
   const [pDescription, setPDescription] = useState('');
   const [pLocation, setPLocation] = useState('');
+
+  // Provider Onboarding Wizard State
+  const [onboardingStep, setOnboardingStep] = useState(1);
+  const [onboardingDisplayName, setOnboardingDisplayName] = useState(profile?.displayName || '');
+  const [onboardingProvince, setOnboardingProvince] = useState('');
+  const [onboardingTown, setOnboardingTown] = useState('');
+  const [onboardingEmail, setOnboardingEmail] = useState(profile?.email || user?.email || '');
+  const [onboardingPhone, setOnboardingPhone] = useState('');
+  const [onboardingCategories, setOnboardingCategories] = useState<string[]>([]);
+  const [onboardingServices, setOnboardingServices] = useState<ServiceItem[]>([]);
+  const [showVerifiedModal, setShowVerifiedModal] = useState(false);
+
+  const handleToggleOnboardingCat = (catName: string) => {
+    if (onboardingCategories.includes(catName)) {
+      setOnboardingCategories(prev => prev.filter(c => c !== catName));
+    } else {
+      if (onboardingCategories.length >= 3) {
+        showToast('You can select a maximum of 3 categories.', 'error');
+        return;
+      }
+      setOnboardingCategories(prev => [...prev, catName]);
+    }
+  };
+
+  const handleToggleOnboardingService = (service: any, categoryName: string) => {
+    const isSelected = onboardingServices.some(s => s.name === service.name);
+    if (isSelected) {
+      setOnboardingServices(prev => prev.filter(s => s.name !== service.name));
+    } else {
+      setOnboardingServices(prev => [...prev, {
+        id: Math.random().toString(36).substr(2, 9),
+        name: service.name,
+        description: categoryName + ' Service',
+        price: service.price,
+        duration: '60 min',
+        unit: service.unit || '',
+        custom: service.custom || false
+      }]);
+    }
+  };
+
+  const handleFinishOnboarding = async () => {
+    if (!user) return;
+    setUpdating(true);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        role: 'provider'
+      });
+
+      const payload = {
+        uid: user.uid,
+        name: onboardingDisplayName,
+        category: onboardingCategories[0] || 'Tutors',
+        categories: onboardingCategories,
+        email: onboardingEmail,
+        phone: onboardingPhone,
+        province: onboardingProvince,
+        town: onboardingTown,
+        location: `${onboardingProvince}, ${onboardingTown}`,
+        description: '',
+        photoURL: profile?.photoURL || '',
+        rating: 5,
+        reviewCount: 0,
+        isApproved: false,
+        isVerified: 'pending',
+        services: onboardingServices,
+        availability: {
+          monday: { enabled: true, slots: ['09:00 AM', '10:00 AM', '11:00 AM', '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'] },
+          tuesday: { enabled: true, slots: ['09:00 AM', '10:00 AM', '11:00 AM', '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'] },
+          wednesday: { enabled: true, slots: ['09:00 AM', '10:00 AM', '11:00 AM', '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'] },
+          thursday: { enabled: true, slots: ['09:00 AM', '10:00 AM', '11:00 AM', '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'] },
+          friday: { enabled: true, slots: ['09:00 AM', '10:00 AM', '11:00 AM', '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'] },
+          saturday: { enabled: false, slots: [] },
+          sunday: { enabled: false, slots: [] },
+        },
+        createdAt: new Date(),
+      };
+      await setDoc(doc(db, 'providers', user.uid), payload);
+
+      await refreshProfile();
+      setProviderProfile(payload as any);
+      setPName(onboardingDisplayName);
+      setPCategory(onboardingCategories[0] || 'Tutors');
+      setPCategories(onboardingCategories);
+      setPLocation(`${onboardingProvince}, ${onboardingTown}`);
+
+      setShowVerifiedModal(true);
+    } catch (error) {
+      console.error("Error creating provider account:", error);
+      handleFirestoreError(error, OperationType.WRITE, 'providers');
+      showToast('Error registering profile. Please try again.', 'error');
+    } finally {
+      setUpdating(false);
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -153,6 +251,13 @@ export default function UserDashboard() {
     };
     fetchData();
   }, [user, profile]);
+
+  useEffect(() => {
+    if (profile) {
+      if (!onboardingDisplayName) setOnboardingDisplayName(profile.displayName || '');
+      if (!onboardingEmail) setOnboardingEmail(profile.email || user?.email || '');
+    }
+  }, [profile, user]);
 
   const handleUpdateStatus = async (bookingId: string, status: string) => {
     try {
@@ -1282,99 +1387,334 @@ export default function UserDashboard() {
                 key="become-provider"
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
-                className="max-w-2xl"
+                className="max-w-3xl w-full mx-auto"
               >
+                {/* Header */}
                 <div className="flex items-center gap-4 mb-8">
                   <button 
-                    onClick={() => setActiveTab('profile')}
-                    className="p-3 bg-slate-50 text-slate-400 hover:text-slate-900 rounded-2xl transition-all"
-                  >
-                    <X size={20} />
-                  </button>
-                  <h2 className="text-3xl font-black text-gray-900">Start Your Business</h2>
-                </div>
-
-                <div className="bg-white p-10 rounded-[3rem] border border-gray-100 shadow-sm space-y-8">
-                  <p className="text-gray-500 text-lg font-medium leading-relaxed">Join our network of professional service providers and grow your business today.</p>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="p-6 bg-slate-50 rounded-3xl text-center">
-                      <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-indigo-600 mx-auto mb-4 shadow-sm">
-                        <Briefcase size={24} />
-                      </div>
-                      <p className="font-bold text-gray-900 text-sm">Add Services</p>
-                    </div>
-                    <div className="p-6 bg-slate-50 rounded-3xl text-center">
-                      <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-indigo-600 mx-auto mb-4 shadow-sm">
-                        <Clock size={24} />
-                      </div>
-                      <p className="font-bold text-gray-900 text-sm">Set Hours</p>
-                    </div>
-                    <div className="p-6 bg-slate-50 rounded-3xl text-center">
-                      <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-indigo-600 mx-auto mb-4 shadow-sm">
-                        <Star size={24} />
-                      </div>
-                      <p className="font-bold text-gray-900 text-sm">Get Bookings</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="flex items-start gap-4 p-4 hover:bg-slate-50 rounded-2xl transition-colors">
-                      <CheckCircle2 className="text-emerald-500 shrink-0 mt-1" />
-                      <div>
-                        <p className="font-bold text-gray-900">Zero Monthly Fees</p>
-                        <p className="text-sm text-gray-500 font-medium">Only pay a small commission on successful bookings.</p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-4 p-4 hover:bg-slate-50 rounded-2xl transition-colors">
-                      <CheckCircle2 className="text-emerald-500 shrink-0 mt-1" />
-                      <div>
-                        <p className="font-bold text-gray-900">Secure Payments</p>
-                        <p className="text-sm text-gray-500 font-medium">Funds are held securely until the job is completed.</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <button 
-                    onClick={async () => {
-                      if (!user) return;
-                      setUpdating(true);
-                      try {
-                        await updateDoc(doc(db, 'users', user.uid), {
-                          role: 'provider'
-                        });
-                        
-                        await setDoc(doc(db, 'providers', user.uid), {
-                          uid: user.uid,
-                          name: profile.displayName || 'New Provider',
-                          category: 'Tutors',
-                          categories: ['Tutors'],
-                          description: '',
-                          location: '',
-                          photoURL: profile.photoURL || '',
-                          rating: 5,
-                          reviewCount: 0,
-                          isApproved: false,
-                          isVerified: 'none',
-                          services: [],
-                          availability: {},
-                          createdAt: serverTimestamp(),
-                        });
-
-                        await refreshProfile();
-                        setActiveTab('provider-settings');
-                        alert('Congratulations! You are now a provider. Please set up your business details.');
-                      } catch (e) {
-                        handleFirestoreError(e, OperationType.WRITE, 'providers');
-                      } finally {
-                        setUpdating(false);
+                    onClick={() => {
+                      if (onboardingStep > 1) {
+                        setOnboardingStep(prev => prev - 1);
+                      } else {
+                        setActiveTab('profile');
                       }
                     }}
-                    disabled={updating}
-                    className="w-full py-5 bg-indigo-600 text-white rounded-3xl font-black text-xl hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 flex items-center justify-center gap-3 mt-4"
+                    className="p-3 bg-slate-50 text-slate-400 hover:text-slate-900 rounded-2xl transition-all"
                   >
-                    {updating ? 'Processing...' : 'Complete Provider Setup'}
+                    <ArrowLeft size={20} />
                   </button>
+                  <div>
+                    <span className="text-xs uppercase font-black text-indigo-600 tracking-widest">Provider Onboarding Wizard</span>
+                    <h2 className="text-3xl font-black text-gray-900 leading-tight">Start Your Business</h2>
+                  </div>
+                </div>
+
+                {/* Progress Bar & Tracker */}
+                <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm mb-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-xs font-bold text-slate-400">Step {onboardingStep} of 4</span>
+                    <span className="text-xs font-black text-indigo-600 uppercase tracking-widest">
+                      {onboardingStep === 1 && 'Business Name'}
+                      {onboardingStep === 2 && 'Location & Contacts'}
+                      {onboardingStep === 3 && 'Pick Divisions'}
+                      {onboardingStep === 4 && 'Database Services'}
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                    <div 
+                      className="bg-indigo-600 h-full transition-all duration-300"
+                      style={{ width: `${(onboardingStep / 4) * 100}%` }}
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 mt-4">
+                    {['Name', 'Contacts', 'Divisions', 'Services'].map((lbl, idx) => (
+                      <div key={idx} className="text-center">
+                        <p className={`text-[10px] font-black uppercase tracking-wider ${onboardingStep >= idx + 1 ? 'text-indigo-650' : 'text-slate-300'}`}>
+                          {lbl}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Wizard Steps Form */}
+                <div className="bg-white p-8 md:p-10 rounded-[3rem] border border-slate-100 shadow-xl shadow-slate-100/40 space-y-8">
+                  {onboardingStep === 1 && (
+                    <div className="space-y-6">
+                      <div className="space-y-2">
+                        <span className="px-3 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-widest rounded-full">
+                          Step 1 of 4 • Business Profile
+                        </span>
+                        <h3 className="text-2xl font-black text-slate-950">Let's Choose Your Public Business Display Name</h3>
+                        <p className="text-sm font-medium text-slate-500 leading-relaxed">
+                          This is the brand, company, or personal name clients will see when finding and hiring you for catalog orders.
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-black text-slate-450 uppercase tracking-widest ml-1">Company Display Name</label>
+                        <input
+                          type="text"
+                          value={onboardingDisplayName}
+                          onChange={(e) => setOnboardingDisplayName(e.target.value)}
+                          placeholder="e.g. Pretoria Elite Plumbing Repairs"
+                          className="w-full px-6 py-5 bg-slate-50 border-2 border-transparent focus:border-indigo-600 focus:bg-white rounded-2xl outline-none font-bold text-lg transition-all"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setOnboardingStep(2)}
+                        disabled={onboardingDisplayName.trim().length < 2}
+                        className="w-full py-5 bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 active:scale-[0.99] rounded-[2rem] font-black text-lg transition-all flex items-center justify-center gap-2"
+                      >
+                        Next: Contacts & Area <ChevronRight size={18} />
+                      </button>
+                    </div>
+                  )}
+
+                  {onboardingStep === 2 && (
+                    <div className="space-y-6">
+                      <div className="space-y-2">
+                        <span className="px-3 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-widest rounded-full">
+                          Step 2 of 4 • Contact & Location
+                        </span>
+                        <h3 className="text-2xl font-black text-slate-950">Where can clients reach you?</h3>
+                        <p className="text-sm font-medium text-slate-500 leading-relaxed">
+                          Input your region town and direct phone/email address details so admins can confirm your identity and clients can match with you.
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <label className="text-xs font-black text-slate-450 uppercase tracking-widest ml-1">Location Province</label>
+                          <select
+                            value={onboardingProvince}
+                            onChange={(e) => setOnboardingProvince(e.target.value)}
+                            className="w-full px-6 py-5 bg-slate-50 border-2 border-transparent focus:border-indigo-600 focus:bg-white rounded-2xl outline-none font-extrabold text-sm transition-all"
+                          >
+                            <option value="">-- Choose Province --</option>
+                            <option value="Eastern Cape">Eastern Cape</option>
+                            <option value="Free State">Free State</option>
+                            <option value="Gauteng">Gauteng</option>
+                            <option value="KwaZulu-Natal">KwaZulu-Natal</option>
+                            <option value="Limpopo">Limpopo</option>
+                            <option value="Mpumalanga">Mpumalanga</option>
+                            <option value="North West">North West</option>
+                            <option value="Northern Cape">Northern Cape</option>
+                            <option value="Western Cape">Western Cape</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-xs font-black text-slate-450 uppercase tracking-widest ml-1">Nearest Town / Area</label>
+                          <input
+                            type="text"
+                            value={onboardingTown}
+                            onChange={(e) => setOnboardingTown(e.target.value)}
+                            placeholder="e.g. Pretoria East, Centurion"
+                            className="w-full px-6 py-5 bg-slate-50 border-2 border-transparent focus:border-indigo-600 focus:bg-white rounded-2xl outline-none font-bold text-sm transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <label className="text-xs font-black text-slate-450 uppercase tracking-widest ml-1">Email Address</label>
+                          <div className="relative">
+                            <span className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400">
+                              <Mail size={18} />
+                            </span>
+                            <input
+                              type="email"
+                              value={onboardingEmail}
+                              onChange={(e) => setOnboardingEmail(e.target.value)}
+                              placeholder="e.g. contact@mybusiness.co.za"
+                              className="w-full pl-12 pr-6 py-5 bg-slate-50 border-2 border-transparent focus:border-indigo-600 focus:bg-white rounded-2xl outline-none font-bold text-sm transition-all"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-xs font-black text-slate-450 uppercase tracking-widest ml-1">Contact Phone Number</label>
+                          <div className="relative">
+                            <span className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400">
+                              <Phone size={18} />
+                            </span>
+                            <input
+                              type="tel"
+                              value={onboardingPhone}
+                              onChange={(e) => setOnboardingPhone(e.target.value)}
+                              placeholder="e.g. 082 123 4567"
+                              className="w-full pl-12 pr-6 py-5 bg-slate-50 border-2 border-transparent focus:border-indigo-600 focus:bg-white rounded-2xl outline-none font-bold text-sm transition-all"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-4">
+                        <button
+                          type="button"
+                          onClick={() => setOnboardingStep(1)}
+                          className="w-1/3 py-5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-[2rem] font-bold text-sm transition-all"
+                        >
+                          Back
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setOnboardingStep(3)}
+                          disabled={
+                            !onboardingProvince || 
+                            onboardingTown.trim().length < 2 || 
+                            !onboardingEmail.includes('@') || 
+                            onboardingPhone.trim().length < 8
+                          }
+                          className="w-2/3 py-5 bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 rounded-[2rem] font-black text-lg transition-all flex items-center justify-center gap-2"
+                        >
+                          Next: Choose Categories <ChevronRight size={18} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {onboardingStep === 3 && (
+                    <div className="space-y-6">
+                      <div className="space-y-2">
+                        <span className="px-3 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-widest rounded-full">
+                          Step 3 of 4 • Select Divisions
+                        </span>
+                        <h3 className="text-2xl font-black text-slate-950">Which divisions do you operate in?</h3>
+                        <p className="text-sm font-medium text-slate-500 leading-relaxed">
+                          Pick up to <strong className="text-indigo-600 font-extrabold">3 maximum</strong> categories you specialise in. Standard bookable services from these divisions will show on the next screen.
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {SERVICE_CATEGORIES.map((cat) => {
+                          const isSelected = onboardingCategories.includes(cat.name);
+                          return (
+                            <button
+                              key={cat.name}
+                              type="button"
+                              onClick={() => handleToggleOnboardingCat(cat.name)}
+                              className={`p-4 rounded-2xl border-2 text-center transition-all flex flex-col items-center justify-center gap-2 relative h-28 ${
+                                isSelected 
+                                  ? 'border-indigo-600 bg-indigo-50 text-indigo-700 shadow-md shadow-indigo-100/45'
+                                  : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                              }`}
+                            >
+                              <span className="text-2xl">{cat.icon}</span>
+                              <span className="text-[11px] font-black tracking-tight leading-tight">{cat.name}</span>
+                              {isSelected && (
+                                <div className="absolute top-1.5 right-1.5 w-4.5 h-4.5 rounded-full bg-indigo-600 text-white flex items-center justify-center">
+                                  <Check size={10} strokeWidth={4} />
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="flex gap-4">
+                        <button
+                          type="button"
+                          onClick={() => setOnboardingStep(2)}
+                          className="w-1/3 py-5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-[2rem] font-bold text-sm transition-all"
+                        >
+                          Back
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setOnboardingStep(4)}
+                          disabled={onboardingCategories.length === 0 || onboardingCategories.length > 3}
+                          className="w-2/3 py-5 bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 rounded-[2rem] font-black text-lg transition-all flex items-center justify-center gap-2"
+                        >
+                          Next: Add Services ({onboardingCategories.length}/3 chosen) <ChevronRight size={18} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {onboardingStep === 4 && (
+                    <div className="space-y-6">
+                      <div className="space-y-2">
+                        <span className="px-3 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-widest rounded-full">
+                          Step 4 of 4 • Bookable Services
+                        </span>
+                        <h3 className="text-2xl font-black text-slate-950">Select Standard Pricing Services Included</h3>
+                        <p className="text-sm font-medium text-slate-500 leading-relaxed">
+                          Choose the specific services your business offers from the categories you picked above. Standard locked rates build immediate user confidence.
+                        </p>
+                      </div>
+
+                      <div className="space-y-10 max-h-[460px] overflow-y-auto pr-2 border-y border-slate-100 py-4">
+                        {SERVICE_CATEGORIES.filter((c) => onboardingCategories.includes(c.name)).map((categoryData) => (
+                          <div key={categoryData.name} className="space-y-4">
+                            <div className="flex items-center gap-2 border-b border-indigo-50 pb-2">
+                              <span className="text-2xl">{categoryData.icon}</span>
+                              <h4 className="font-extrabold text-slate-800 text-sm uppercase tracking-wider">{categoryData.name}</h4>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              {categoryData.services.map((service, idx) => {
+                                const isSelected = onboardingServices.some(s => s.name === service.name);
+                                return (
+                                  <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => handleToggleOnboardingService(service, categoryData.name)}
+                                    className={`p-4 rounded-2xl border-2 text-left transition-all flex flex-col justify-between h-34 ${
+                                      isSelected 
+                                        ? 'border-indigo-600 bg-indigo-50/45 shadow-sm shadow-indigo-100/30' 
+                                        : 'border-slate-150 bg-white hover:border-slate-300'
+                                    }`}
+                                  >
+                                    <div>
+                                      <div className="flex justify-between items-start mb-1">
+                                        <span className="text-xl">{categoryData.icon}</span>
+                                        {isSelected && (
+                                          <div className="w-4.5 h-4.5 bg-indigo-600 rounded-lg flex items-center justify-center text-white shrink-0">
+                                            <Check size={10} strokeWidth={4} />
+                                          </div>
+                                        )}
+                                      </div>
+                                      <h5 className="font-bold text-slate-900 text-xs leading-snug line-clamp-1">{service.name}</h5>
+                                    </div>
+                                    <div className="mt-2 flex justify-between items-end">
+                                      <p className="text-sm font-black text-indigo-600 whitespace-nowrap">
+                                        {service.custom ? 'Quote required' : `R${service.price.toLocaleString()}${ (service as any).unit || '' }`}
+                                      </p>
+                                      <p className="text-[9px] font-black uppercase text-slate-400">
+                                        {isSelected ? '✓ Selected' : '+ Add'}
+                                      </p>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex gap-4">
+                        <button
+                          type="button"
+                          onClick={() => setOnboardingStep(3)}
+                          className="w-1/3 py-5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-[2rem] font-bold text-sm transition-all"
+                        >
+                          Back
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleFinishOnboarding}
+                          disabled={updating}
+                          className="w-2/3 py-5 bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 rounded-[2rem] font-black text-lg transition-all flex items-center justify-center gap-3 shadow-xl shadow-indigo-100"
+                        >
+                          <Save size={20} />
+                          {updating ? 'Saving Profile...' : 'Save & Submit Profile'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )}
@@ -1453,6 +1793,55 @@ export default function UserDashboard() {
                 >
                   {submittingReview ? 'Submitting...' : 'Submit Review'}
                   {!submittingReview && <ChevronRight size={20} />}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Verification Warning Modal */}
+      <AnimatePresence>
+        {showVerifiedModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-md bg-slate-900/60">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 30 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 30 }}
+              className="bg-white rounded-[3rem] w-full max-w-lg shadow-2xl overflow-hidden p-10 text-center relative border border-slate-100"
+            >
+              {/* Pulsing state icon badge */}
+              <div className="w-24 h-24 bg-amber-50 rounded-full flex items-center justify-center text-amber-500 mx-auto mb-8 shadow-inner animate-pulse">
+                <ShieldCheck size={48} />
+              </div>
+
+              <h3 className="text-3xl font-black text-slate-900 mb-4 tracking-tight">Verification Pending ⏳</h3>
+              
+              <p className="text-slate-500 font-medium leading-relaxed mb-8">
+                Thank you for registering! Your profile has been updated and sent to our school administrators for review. 
+                <br /><br />
+                You must <strong>wait to be verified</strong> before your business can accept bookings and appear on active listings. In the meantime, you are welcome to explore other verified professional services currently online!
+              </p>
+
+              <div className="space-y-4">
+                <button
+                  onClick={() => {
+                    setShowVerifiedModal(false);
+                    // Redirect to the main browse / homepage
+                    window.location.href = '/';
+                  }}
+                  className="w-full py-5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-lg transition-all shadow-xl shadow-indigo-100 flex items-center justify-center gap-2"
+                >
+                  View Services Currently Online 🔍
+                </button>
+                <button
+                  onClick={() => {
+                    setShowVerifiedModal(false);
+                    setActiveTab('bookings');
+                  }}
+                  className="w-full py-4 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-2xl font-bold text-sm transition-all"
+                >
+                  Go to Client Dashboard
                 </button>
               </div>
             </motion.div>

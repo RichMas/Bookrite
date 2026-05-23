@@ -87,6 +87,8 @@ export interface ProviderProfile {
   isVerified: 'pending' | 'verified' | 'rejected' | 'requirements' | 'none';
   email?: string;
   phone?: string;
+  province?: string;
+  town?: string;
   address?: string;
   city?: string;
   ficaDocUrl?: string;
