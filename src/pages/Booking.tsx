@@ -7,6 +7,7 @@ import { useAuth } from '../App';
 import { format, addDays, startOfToday, isSameDay, parseISO } from 'date-fns';
 import { Calendar as CalendarIcon, Clock, ArrowRight, CheckCircle2, ChevronRight, LayoutGrid } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { payFastGlobalConfig, generatePayFastSignature, getPayFastUrl } from '../utils/payfast';
 
 const TIME_SLOTS = ['09:00 AM', '10:00 AM', '11:00 AM', '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'];
 
@@ -67,7 +68,7 @@ export default function BookingPage() {
     if (!user || !provider || !selectedTime || !selectedService) return;
     setSubmitting(true);
     try {
-      await addDoc(collection(db, 'bookings'), {
+      const bookingData = {
         customerId: user.uid,
         customerName: profile?.displayName || 'Unknown Customer',
         providerId: provider.uid,
@@ -79,15 +80,57 @@ export default function BookingPage() {
         time: selectedTime,
         status: 'pending',
         totalAmount: selectedService.price,
-        paymentStatus: 'paid_simulated',
+        paymentStatus: 'unpaid',
         payoutStatus: 'pending',
         createdAt: serverTimestamp(),
+      };
+
+      const bookingRef = await addDoc(collection(db, 'bookings'), bookingData);
+      const bookingId = bookingRef.id;
+
+      // Extract details for PayFast fields
+      const names = (profile?.displayName || 'Pro Customer').trim().split(/\s+/);
+      const name_first = names[0] || 'Pro';
+      const name_last = names.slice(1).join(' ') || 'Customer';
+
+      const pfData = {
+        merchant_id: payFastGlobalConfig.merchant_id,
+        merchant_key: payFastGlobalConfig.merchant_key,
+        return_url: `${window.location.origin}/dashboard?payment_success=true&booking_id=${bookingId}&tab=bookings`,
+        cancel_url: `${window.location.origin}/booking/${provider.uid}?payment_cancelled=true`,
+        name_first: name_first.substring(0, 100),
+        name_last: name_last.substring(0, 100),
+        email_address: user.email || 'customer@pinyourpro.co.za',
+        m_payment_id: bookingId,
+        amount: Number(selectedService.price).toFixed(2),
+        item_name: selectedService.name.substring(0, 100),
+        item_description: `PinYourPro Booking: ${selectedService.name} with ${provider.name}`.substring(0, 255),
+        custom_str1: 'PinYourPro'
+      };
+
+      const signature = generatePayFastSignature(pfData, payFastGlobalConfig.passphrase);
+
+      // Create and submit immediate form redirect
+      const pfUrl = getPayFastUrl(payFastGlobalConfig.is_live);
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = pfUrl;
+
+      const payload = { ...pfData, signature };
+      Object.entries(payload).forEach(([key, val]) => {
+        if (val !== undefined && val !== null && val !== '') {
+          const input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = key;
+          input.value = String(val);
+          form.appendChild(input);
+        }
       });
-      setSuccess(true);
-      setTimeout(() => navigate('/dashboard'), 3000);
+
+      document.body.appendChild(form);
+      form.submit();
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'bookings');
-    } finally {
       setSubmitting(false);
     }
   };
@@ -128,6 +171,21 @@ export default function BookingPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-12">
+      {searchParams.get('payment_cancelled') === 'true' && (
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8 p-6 bg-amber-50 rounded-[2rem] border-2 border-amber-100 text-amber-900 flex items-center gap-4 shadow-lg shadow-amber-50"
+        >
+          <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center font-bold text-xl flex-shrink-0">
+            !
+          </div>
+          <div>
+            <p className="font-extrabold text-lg">Payment Cancelled</p>
+            <p className="text-sm text-amber-700 font-medium">Your checkout process was cancelled. No charges were made, and you can try booking again whenever you are ready.</p>
+          </div>
+        </motion.div>
+      )}
       <div className="flex flex-col lg:flex-row gap-12">
         <div className="flex-1 space-y-12">
           <section>

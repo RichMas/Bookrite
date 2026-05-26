@@ -205,7 +205,40 @@ export default function UserDashboard() {
     if (partnerId && partnerName) {
       setSelectedChatUser({ id: partnerId, name: partnerName });
     }
-  }, [searchParams]);
+
+    // Handle PayFast successfully redirected payment
+    const paymentSuccess = searchParams.get('payment_success');
+    const bookingId = searchParams.get('booking_id');
+    if (paymentSuccess === 'true' && bookingId) {
+      const confirmBookingPayment = async () => {
+        try {
+          // Update booking status in Firestore
+          await updateDoc(doc(db, 'bookings', bookingId), {
+            paymentStatus: 'paid',
+            status: 'confirmed'
+          });
+          
+          showToast('Payment secure escrow deposit completed! Your booking is confirmed.', 'success');
+          
+          // Clear query parameters from URL without reloading
+          const newParams = new URLSearchParams(searchParams);
+          newParams.delete('payment_success');
+          newParams.delete('booking_id');
+          setSearchParams(newParams);
+          
+          // Refresh list of bookings
+          const field = profile?.role === 'provider' ? 'providerId' : 'customerId';
+          const q = query(collection(db, 'bookings'), where(field, '==', user?.uid));
+          const bookingSnap = await getDocs(q);
+          setBookings(bookingSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any)));
+        } catch (error) {
+          console.error("Error updating booking on successful payment:", error);
+          showToast('Failed to finalize booking payment status.', 'error');
+        }
+      };
+      confirmBookingPayment();
+    }
+  }, [searchParams, setSearchParams, user, profile]);
 
   useEffect(() => {
     const fetchData = async () => {
