@@ -155,6 +155,12 @@ export default function Navbar() {
           <Link to="/browse" className="text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors">
             Browse Services
           </Link>
+          <Link to="/about" className="text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors">
+            About Us
+          </Link>
+          <Link to="/contact" className="text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors">
+            Contact Us
+          </Link>
           {user ? (
             <div className="flex items-center gap-4">
               {(profile?.role === 'admin' || user.email === 'paragonbusinessconsult@gmail.com' || user.email === 'sithembiledlaza8@gmail.com') && (
@@ -402,6 +408,8 @@ export default function Navbar() {
             className="md:hidden absolute top-16 left-0 right-0 bg-white border-b border-gray-100 p-4 flex flex-col gap-4 shadow-xl"
           >
             <Link to="/browse" onClick={() => setIsOpen(false)} className="text-lg font-medium text-gray-700 p-2">Browse Services</Link>
+            <Link to="/about" onClick={() => setIsOpen(false)} className="text-lg font-medium text-gray-700 p-2">About Us</Link>
+            <Link to="/contact" onClick={() => setIsOpen(false)} className="text-lg font-medium text-gray-700 p-2">Contact Us</Link>
             {user ? (
                <>
                 <Link to="/dashboard" onClick={() => setIsOpen(false)} className="text-lg font-medium text-gray-700 p-2">Dashboard</Link>

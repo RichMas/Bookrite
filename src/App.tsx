@@ -17,6 +17,8 @@ import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import UserDashboard from './pages/UserDashboard';
 import Terms from './pages/Terms';
+import About from './pages/About';
+import Contact from './pages/Contact';
 
 // Context
 interface AuthContextType {
@@ -232,6 +234,8 @@ export default function App() {
                 ) : <Navigate to="/auth" />
               } />
               <Route path="/terms" element={<Terms />} />
+              <Route path="/about" element={<About />} />
+              <Route path="/contact" element={<Contact />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </main>
