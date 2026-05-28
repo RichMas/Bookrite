@@ -122,8 +122,8 @@ export default function Contact() {
                   </div>
                   <div>
                     <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Call us</h4>
-                    <p className="font-bold text-slate-800">+27 (0) 87 550 4933</p>
-                    <p className="text-xs text-slate-505 mt-0.5">Mon - Fri • 08:30 to 16:30 CAT</p>
+                    <p className="font-bold text-slate-800">+27 62 937 7066</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Mon - Fri • 08:30 to 16:30 CAT</p>
                   </div>
                 </div>
 
@@ -133,8 +133,8 @@ export default function Contact() {
                   </div>
                   <div>
                     <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Corporate Base</h4>
-                    <p className="font-bold text-slate-800">Century City, Cape Town</p>
-                    <p className="text-xs text-slate-505 mt-0.5">Western Cape, South Africa, 7441</p>
+                    <p className="font-bold text-slate-800">Johannesburg, South Africa</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Gauteng, South Africa</p>
                   </div>
                 </div>
               </div>
