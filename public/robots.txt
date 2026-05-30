@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Allow: /about
+Allow: /contact
+Allow: /browse
+Allow: /terms
+
+# Disallow access to dynamic auth state page or booking systems
+Disallow: /booking/*
+Disallow: /dashboard/*
+
+Sitemap: https://pinyourpro.co.za/sitemap.xml
