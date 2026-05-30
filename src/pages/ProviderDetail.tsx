@@ -469,7 +469,7 @@ export default function ProviderDetail() {
             </div>
 
             <p className="mt-6 text-center text-xs text-gray-400">
-              Payments are secured by PayFast • PinYourPro Protection
+              Payments are secured by PayPal • PinYourPro Protection
             </p>
           </div>
         </div>

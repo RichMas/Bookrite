@@ -206,7 +206,7 @@ export default function UserDashboard() {
       setSelectedChatUser({ id: partnerId, name: partnerName });
     }
 
-    // Handle PayFast successfully redirected payment
+    // Handle PayPal successfully redirected payment (if any fallback/redirect happens)
     const paymentSuccess = searchParams.get('payment_success');
     const bookingId = searchParams.get('booking_id');
     if (paymentSuccess === 'true' && bookingId) {
@@ -736,9 +736,16 @@ export default function UserDashboard() {
                               <Star size={12} fill="currentColor" /> Reviewed
                             </span>
                           )}
-                          {profile?.role === 'customer' && booking.status === 'pending' && (
+                          {profile?.role === 'customer' && (booking.status === 'pending' || booking.status === 'confirmed') && (
                             <button 
-                              onClick={() => handleUpdateStatus(booking.id, 'cancelled')}
+                              onClick={() => {
+                                if (booking.status === 'confirmed') {
+                                  if (!window.confirm("Are you sure you want to cancel? Confirmed bookings cancelled by the customer incur a R50 cancellation fee as per Platform Rules.")) {
+                                    return;
+                                  }
+                                }
+                                handleUpdateStatus(booking.id, 'cancelled');
+                              }}
                               className="px-6 py-2 text-red-600 border border-red-100 rounded-xl text-sm font-bold hover:bg-red-50"
                             >
                               Cancel

@@ -7,7 +7,7 @@ import { useAuth } from '../App';
 import { format, addDays, startOfToday, isSameDay, parseISO } from 'date-fns';
 import { Calendar as CalendarIcon, Clock, ArrowRight, CheckCircle2, ChevronRight, LayoutGrid } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { payFastGlobalConfig, generatePayFastSignature, getPayFastUrl } from '../utils/payfast';
+import { payPalGlobalConfig, convertZarToUsd } from '../utils/paypal';
 
 const TIME_SLOTS = ['09:00 AM', '10:00 AM', '11:00 AM', '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'];
 
@@ -64,76 +64,117 @@ export default function BookingPage() {
     fetchProvider();
   }, [id, paramServiceId]);
 
-  const handleBooking = async () => {
-    if (!user || !provider || !selectedTime || !selectedService) return;
-    setSubmitting(true);
-    try {
-      const bookingData = {
-        customerId: user.uid,
-        customerName: profile?.displayName || 'Unknown Customer',
-        providerId: provider.uid,
-        providerName: provider.name,
-        category: provider.category,
-        serviceId: selectedService.id,
-        serviceName: selectedService.name,
-        date: format(selectedDate, 'yyyy-MM-dd'),
-        time: selectedTime,
-        status: 'pending',
-        totalAmount: selectedService.price,
-        paymentStatus: 'unpaid',
-        payoutStatus: 'pending',
-        createdAt: serverTimestamp(),
-      };
+  const [sdkReady, setSdkReady] = useState(false);
 
-      const bookingRef = await addDoc(collection(db, 'bookings'), bookingData);
-      const bookingId = bookingRef.id;
-
-      // Extract details for PayFast fields
-      const names = (profile?.displayName || 'Pro Customer').trim().split(/\s+/);
-      const name_first = names[0] || 'Pro';
-      const name_last = names.slice(1).join(' ') || 'Customer';
-
-      const pfData = {
-        merchant_id: payFastGlobalConfig.merchant_id,
-        merchant_key: payFastGlobalConfig.merchant_key,
-        return_url: `${window.location.origin}/dashboard?payment_success=true&booking_id=${bookingId}&tab=bookings`,
-        cancel_url: `${window.location.origin}/booking/${provider.uid}?payment_cancelled=true`,
-        name_first: name_first.substring(0, 100),
-        name_last: name_last.substring(0, 100),
-        email_address: user.email || 'customer@pinyourpro.co.za',
-        m_payment_id: bookingId,
-        amount: Number(selectedService.price).toFixed(2),
-        item_name: selectedService.name.substring(0, 100),
-        item_description: `PinYourPro Booking: ${selectedService.name} with ${provider.name}`.substring(0, 255),
-        custom_str1: 'PinYourPro'
-      };
-
-      const signature = generatePayFastSignature(pfData, payFastGlobalConfig.passphrase);
-
-      // Create and submit immediate form redirect
-      const pfUrl = getPayFastUrl(payFastGlobalConfig.is_live);
-      const form = document.createElement('form');
-      form.method = 'POST';
-      form.action = pfUrl;
-
-      const payload = { ...pfData, signature };
-      Object.entries(payload).forEach(([key, val]) => {
-        if (val !== undefined && val !== null && val !== '') {
-          const input = document.createElement('input');
-          input.type = 'hidden';
-          input.name = key;
-          input.value = String(val);
-          form.appendChild(input);
-        }
-      });
-
-      document.body.appendChild(form);
-      form.submit();
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'bookings');
-      setSubmitting(false);
+  useEffect(() => {
+    // If PayPal is already loaded globally, set ready
+    if ((window as any).paypal) {
+      setSdkReady(true);
+      return;
     }
-  };
+
+    const scriptId = 'paypal-sdk';
+    const existingScript = document.getElementById(scriptId);
+    if (existingScript) {
+      existingScript.addEventListener('load', () => setSdkReady(true));
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.id = scriptId;
+    script.src = `https://www.paypal.com/sdk/js?client-id=${payPalGlobalConfig.client_id}&currency=USD`;
+    script.async = true;
+    script.onload = () => setSdkReady(true);
+    script.onerror = (e) => console.error('PayPal SDK load failed:', e);
+    document.body.appendChild(script);
+  }, []);
+
+  useEffect(() => {
+    if (!sdkReady || !(window as any).paypal || !selectedService || !selectedTime || !user || !provider) {
+      return;
+    }
+
+    const container = document.getElementById('paypal-button-container');
+    if (!container) return;
+
+    // Direct clean container rebuild to prevent React render-cycle duplicates
+    container.innerHTML = '';
+
+    try {
+      (window as any).paypal.Buttons({
+        style: {
+          layout: 'vertical',
+          color: 'gold',
+          shape: 'rect',
+          label: 'pay'
+        },
+        createOrder: (data: any, actions: any) => {
+          const servicePrice = Number(selectedService.price) || 0;
+          const platformFee = selectedService.custom ? 0 : 50;
+          const totalPrice = servicePrice + platformFee;
+          const usdAmount = convertZarToUsd(totalPrice);
+          return actions.order.create({
+            purchase_units: [{
+              amount: {
+                currency_code: 'USD',
+                value: usdAmount
+              },
+              description: `PinYourPro Booking: ${selectedService.name} with ${provider.name}`,
+              custom_id: `${user.uid}_${provider.uid}`
+            }]
+          });
+        },
+        onApprove: async (data: any, actions: any) => {
+          setSubmitting(true);
+          try {
+            const details = await actions.order.capture();
+            
+            const servicePrice = Number(selectedService.price) || 0;
+            const platformFee = selectedService.custom ? 0 : 50;
+            const totalPrice = servicePrice + platformFee;
+
+            // Build the standard confirmed booking with the captures
+            const bookingData = {
+              customerId: user.uid,
+              customerName: profile?.displayName || 'Unknown Customer',
+              providerId: provider.uid,
+              providerName: provider.name,
+              category: provider.category,
+              serviceId: selectedService.id,
+              serviceName: selectedService.name,
+              date: format(selectedDate, 'yyyy-MM-dd'),
+              time: selectedTime,
+              status: 'confirmed',
+              servicePrice: servicePrice,
+              platformFee: platformFee,
+              totalAmount: totalPrice,
+              paymentStatus: 'paid',
+              paypalOrderId: details.id,
+              payoutStatus: 'pending',
+              createdAt: serverTimestamp(),
+            };
+
+            await addDoc(collection(db, 'bookings'), bookingData);
+            setSuccess(true);
+            setTimeout(() => navigate('/dashboard?tab=bookings'), 3000);
+          } catch (error) {
+            console.error("PayPal capture or store failed:", error);
+            handleFirestoreError(error, OperationType.WRITE, 'bookings');
+          } finally {
+            setSubmitting(false);
+          }
+        },
+        onCancel: () => {
+          navigate(`/booking/${provider.uid}?payment_cancelled=true`);
+        },
+        onError: (err: any) => {
+          console.error("PayPal Smart Button render/runtime error:", err);
+        }
+      }).render('#paypal-button-container');
+    } catch (err) {
+      console.error("PayPal Buttons initialization error:", err);
+    }
+  }, [sdkReady, selectedService, selectedTime, selectedDate, user, provider, profile, navigate]);
 
   const next7Days = Array.from({ length: 7 }, (_, i) => addDays(startOfToday(), i));
 
@@ -320,13 +361,25 @@ export default function BookingPage() {
                 </span>
               </div>
               
-              <div className="pt-8 border-t border-gray-50">
+              <div className="pt-8 border-t border-gray-100 space-y-3">
+                {selectedService && !selectedService.custom && (
+                  <>
+                    <div className="flex justify-between items-center text-sm font-medium text-slate-500">
+                      <span>Service Price</span>
+                      <span>R{selectedService.price}{selectedService.unit || ''}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm font-medium text-slate-500">
+                      <span>Platform Fee</span>
+                      <span>R50</span>
+                    </div>
+                  </>
+                )}
                 <div className="flex justify-between items-center bg-gray-50 p-6 rounded-2xl">
                   <span className="text-gray-900 font-black text-xl">Total</span>
                   <span className="text-3xl font-black text-indigo-600">
                     {selectedService?.custom 
-                      ? 'Quote' 
-                      : `R${selectedService?.price || 0}${selectedService?.unit || ''}`}
+                      ? 'Custom Quote' 
+                      : `R${(selectedService?.price || 0) + 50}${selectedService?.unit || ''}`}
                   </span>
                 </div>
               </div>
@@ -336,17 +389,26 @@ export default function BookingPage() {
               <p className="text-sm text-center text-red-500 mb-6 font-bold bg-red-50 p-4 rounded-xl">Please log in to continue</p>
             )}
 
-            <button 
-              onClick={handleBooking}
-              disabled={!selectedTime || !selectedService || !user || submitting}
-              className="w-full py-6 bg-emerald-500 text-white rounded-2xl font-black text-xl flex items-center justify-center gap-3 hover:bg-emerald-600 transition-all disabled:bg-gray-100 disabled:text-gray-300 disabled:shadow-none shadow-2xl shadow-emerald-100 hover:-translate-y-1 active:translate-y-0"
-            >
-              {submitting ? 'Authenticating...' : 'Secure Checkout'}
-              {!submitting && <ArrowRight size={22} />}
-            </button>
+            {!selectedTime || !selectedService || !user ? (
+              <button 
+                disabled={true}
+                className="w-full py-5 bg-gray-150 text-gray-400 rounded-2xl font-black text-sm uppercase tracking-wider flex items-center justify-center gap-3 cursor-not-allowed"
+              >
+                <span>Select service & time to Pay</span>
+              </button>
+            ) : (
+              <div className="space-y-4">
+                <div id="paypal-button-container" className="w-full relative z-10" />
+                {submitting && (
+                  <div className="text-center text-xs text-indigo-600 font-extrabold animate-pulse">
+                    Completing your payment deposit...
+                  </div>
+                )}
+              </div>
+            )}
             
             <p className="mt-8 text-center text-[10px] text-gray-400 font-bold uppercase tracking-widest">
-              Secured by PayFast • PinYourPro Protection
+              Secured by PayPal • PinYourPro Protection
             </p>
           </div>
         </div>

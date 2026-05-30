@@ -150,7 +150,7 @@ export default function Contact() {
                 <div>
                   <h4 className="font-black text-lg mb-2 text-white">Escrow Support Notice</h4>
                   <p className="text-xs text-slate-300 font-sans leading-relaxed">
-                    Never send money directly to provider bank accounts. PinYourPro escrow protects you perfectly when payments are made online using our secure PayFast integration. 
+                    Never send money directly to provider bank accounts. PinYourPro escrow protects you perfectly when payments are made online using our secure PayPal integration. 
                   </p>
                 </div>
               </div>

@@ -19,7 +19,7 @@ export default function About() {
     },
     {
       icon: <DollarSign className="w-6 h-6 text-emerald-600" />,
-      title: 'PayFast Escrow System',
+      title: 'PayPal Escrow System',
       description: 'Funds are securely deposited and held by PinYourPro during execution. Providers are guaranteed payment on quality completion, and clients are fully protected against incomplete work.'
     },
     {
@@ -98,7 +98,7 @@ export default function About() {
                 In South Africa, millions of Rands are lost annually to home repair scams, unverified handymen who disappear midway through jobs, or poor trade work. Conversely, honest artisans face unpaid invoices from untrustworthy customers.
               </p>
               <p>
-                We realized that modern technology could resolve this. By designing an digital ecosystem with <strong>secure digital identification</strong>, <strong>professional trade portfolio verifications</strong>, and <strong>PayFast escrow guarantees</strong>, we eliminate the risk for everyone.
+                We realized that modern technology could resolve this. By designing an digital ecosystem with <strong>secure digital identification</strong>, <strong>professional trade portfolio verifications</strong>, and <strong>PayPal escrow guarantees</strong>, we eliminate the risk for everyone.
               </p>
               <p>
                 Our customers only release service payments when they inspect and confirm that the work is fully executed. Our providers carry out repairs knowing their full fees are secured in our safe storage. It represents the perfect win-win for our community.
